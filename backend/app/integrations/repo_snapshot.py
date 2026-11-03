@@ -104,6 +104,7 @@ class RepositorySnapshotService:
         mcp_client: Optional[GitHubMCPClient] = None,
         snapshots_root: Optional[Path] = None,
     ):
+        self._owns_mcp_client = mcp_client is None
         self.mcp_client = mcp_client or get_github_mcp_client()
         self.snapshots_root = (snapshots_root or DEFAULT_SNAPSHOTS_ROOT).resolve()
         self.snapshots_root.mkdir(parents=True, exist_ok=True)
@@ -124,33 +125,40 @@ class RepositorySnapshotService:
         validate_repo_identifier(owner, repo, ref)
         branch = ref or "main"
 
-        # 1. Resolve deterministic commit SHA
-        commit_sha = await self._resolve_commit_sha(owner, repo, branch)
-        short_sha = commit_sha[:8] if commit_sha else "latest"
-        snapshot_dir = self.snapshots_root / f"{owner}_{repo}_{short_sha}"
-
-        # 2. Check if cache exists
-        meta_file = snapshot_dir / "snapshot_metadata.json"
-        if snapshot_dir.is_dir() and meta_file.is_file():
-            logger.info("Found existing verified snapshot cache at %s", snapshot_dir)
-            return snapshot_dir
-
-        # 3. Attempt genuine MCP snapshot
         try:
-            logger.info("Fetching MCP snapshot for %s/%s@%s...", owner, repo, branch)
-            await self._fetch_via_mcp(owner, repo, branch, commit_sha, snapshot_dir)
-            return snapshot_dir
-        except Exception as mcp_err:
-            logger.warning("MCP snapshot creation failed: %s", mcp_err)
-            if not allow_shallow_clone_fallback:
-                raise
+            # 1. Resolve deterministic commit SHA
+            commit_sha = await self._resolve_commit_sha(owner, repo, branch)
+            short_sha = commit_sha[:8] if commit_sha else "latest"
+            snapshot_dir = self.snapshots_root / f"{owner}_{repo}_{short_sha}"
 
-        # 4. Fallback: argument-vector shallow clone (hooks disabled, no submodules)
-        logger.warning(
-            "NON_MCP_FALLBACK: Initiating shallow clone fallback for %s/%s@%s",
-            owner, repo, branch,
-        )
-        return self._fetch_via_shallow_clone(owner, repo, branch, commit_sha, snapshot_dir)
+            # 2. Check if cache exists
+            meta_file = snapshot_dir / "snapshot_metadata.json"
+            if snapshot_dir.is_dir() and meta_file.is_file():
+                logger.info("Found existing verified snapshot cache at %s", snapshot_dir)
+                return snapshot_dir
+
+            # 3. Attempt genuine MCP snapshot
+            try:
+                logger.info("Fetching MCP snapshot for %s/%s@%s...", owner, repo, branch)
+                await self._fetch_via_mcp(owner, repo, branch, commit_sha, snapshot_dir)
+                return snapshot_dir
+            except Exception as mcp_err:
+                logger.warning("MCP snapshot creation failed: %s", mcp_err)
+                if not allow_shallow_clone_fallback:
+                    raise
+
+            # 4. Fallback: argument-vector shallow clone (hooks disabled, no submodules)
+            logger.warning(
+                "NON_MCP_FALLBACK: Initiating shallow clone fallback for %s/%s@%s",
+                owner, repo, branch,
+            )
+            return self._fetch_via_shallow_clone(owner, repo, branch, commit_sha, snapshot_dir)
+        finally:
+            if getattr(self, "_owns_mcp_client", False) and hasattr(self.mcp_client, "close"):
+                try:
+                    await self.mcp_client.close()
+                except Exception:
+                    pass
 
     async def _resolve_commit_sha(self, owner: str, repo: str, branch: str) -> str:
         """Resolve commit SHA deterministically via MCP list_commits."""

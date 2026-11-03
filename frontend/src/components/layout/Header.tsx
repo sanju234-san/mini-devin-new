@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { getHealth, getRuns } from '../../services/api';
 import {
   DeployedCodeIcon,
   SourceIcon,
@@ -26,6 +27,24 @@ const NAV_TITLES: Record<string, string> = {
 
 export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, activeNav = 'dashboard' }) => {
   const currentTitle = NAV_TITLES[activeNav] || 'Workbench';
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [latestRun, setLatestRun] = useState<{ id: string; repo?: string; status?: string } | null>(null);
+
+  useEffect(() => {
+    getHealth()
+      .then((res) => setBackendConnected(res.status === 'ok'))
+      .catch(() => setBackendConnected(false));
+    getRuns(1, 0)
+      .then((res) => {
+        const r = res.runs?.[0];
+        if (r) {
+          setLatestRun({ id: r.id, repo: r.repository, status: r.status });
+        } else {
+          setLatestRun(null);
+        }
+      })
+      .catch(() => setLatestRun(null));
+  }, [activeNav]);
 
   return (
     <header className="fixed top-0 left-0 lg:left-64 right-0 h-14 bg-surface-container-lowest/90 backdrop-blur-md border-b border-outline-variant/30 z-40 px-space-md">
@@ -68,48 +87,48 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, activeNav
           </div>
 
           {/* Context Badges (Repo & Run Context) */}
-          <div className="hidden xl:flex items-center gap-1.5 font-mono text-[11px] select-none">
-            <span className="px-2 py-0.5 rounded bg-surface-container-high/60 border border-outline-variant/30 text-outline">
-              octocat/linguist
-            </span>
-            <span className="px-2 py-0.5 rounded bg-surface-container-high/60 border border-outline-variant/30 text-primary font-semibold">
-              #run-8924a
-            </span>
-          </div>
+          {latestRun && (
+            <div className="hidden xl:flex items-center gap-1.5 font-mono text-[11px] select-none">
+              {latestRun.repo && (
+                <span className="px-2 py-0.5 rounded bg-surface-container-high/60 border border-outline-variant/30 text-outline">
+                  {latestRun.repo}
+                </span>
+              )}
+              <span className="px-2 py-0.5 rounded bg-surface-container-high/60 border border-outline-variant/30 text-primary font-semibold">
+                #{latestRun.id.slice(0, 8)}
+              </span>
+            </div>
+          )}
 
-          {/* Visual Repo Selector (Disabled Placeholder) */}
-          <button
-            type="button"
-            disabled
-            aria-disabled="true"
-            className="hidden md:flex items-center gap-1 px-2 py-1 rounded bg-surface-container-high/60 border border-outline-variant/30 text-on-surface-variant/80 text-xs font-mono cursor-not-allowed opacity-85"
-            title="Repository selection (Placeholder - Config required)"
-          >
-            <SourceIcon className="w-3.5 h-3.5 text-outline" />
-            <span className="truncate max-w-[130px]">octocat/linguist</span>
-            <ChevronDownIcon className="w-3.5 h-3.5 text-outline" />
-          </button>
+          {/* Right: Status Pills & User Area */}
         </div>
 
-        {/* Right: Status Pills & User Area */}
         <div className="flex items-center gap-space-sm sm:gap-space-md flex-shrink-0">
-          {/* Backend Status Pill (Honest: Not Connected) */}
+          {/* Backend Status Pill */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low border border-outline-variant/30 text-xs select-none">
             <span className="relative flex h-2 w-2">
-              <span className="inline-flex rounded-full h-2 w-2 bg-outline" />
+              <span
+                className={`inline-flex rounded-full h-2 w-2 ${
+                  backendConnected ? 'bg-emerald-400' : 'bg-outline'
+                }`}
+              />
             </span>
             <span className="font-mono text-[11px] text-on-surface-variant">
               <span className="text-on-surface font-medium hidden sm:inline">Backend:</span>{' '}
-              <span className="text-outline hidden sm:inline">Not connected (foundation preview)</span>
-              <span className="text-outline sm:hidden">Offline</span>
+              <span className={backendConnected ? 'text-emerald-400 hidden sm:inline font-semibold' : 'text-outline hidden sm:inline'}>
+                {backendConnected ? 'Connected' : 'Not connected'}
+              </span>
+              <span className={backendConnected ? 'text-emerald-400 sm:hidden' : 'text-outline sm:hidden'}>
+                {backendConnected ? 'Online' : 'Offline'}
+              </span>
             </span>
           </div>
 
-          {/* System Run Status Pill (Honest: System Idle) */}
+          {/* System Run Status Pill */}
           <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-high/50 border border-outline-variant/30 select-none">
-            <span className="w-1.5 h-1.5 rounded-full bg-outline/60" />
+            <span className={`w-1.5 h-1.5 rounded-full ${latestRun ? 'bg-primary animate-pulse' : 'bg-outline/60'}`} />
             <span className="font-mono text-[11px] uppercase tracking-wide text-outline">
-              System Idle · Awaiting Task
+              {latestRun ? `Run Active · ${latestRun.status || 'queued'}` : 'System Idle · Awaiting Task'}
             </span>
           </div>
 

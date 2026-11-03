@@ -39,7 +39,15 @@ def diagnose_failure_details(details: str) -> tuple[str, str, list[str]]:
             ["Verify sandbox container lifecycle and backend test runner configuration."],
         )
 
-    # 2. Syntax / Formatting error
+    # 2. Patch / Diff application failure
+    if any(k in lower for k in ("diff contains no valid file headers", "git apply", "patch does not apply", "corrupt patch", "malformed")):
+        return (
+            "patch_apply_error",
+            f"Generated diff could not be applied cleanly in sandbox: {details[:120]}",
+            ["Ensure diff_text is a valid unified diff starting with '--- a/<path>' and '+++ b/<path>' headers."],
+        )
+
+    # 3. Syntax / Formatting error
     if any(k in lower for k in ("syntaxerror", "indentationerror", "taberror")):
         return (
             "syntax_error",

@@ -21,9 +21,9 @@ interface TransparencyDashboardProps {
 }
 
 export const TransparencyDashboard: React.FC<TransparencyDashboardProps> = ({
-  runId = 'run-8924a',
+  runId = '',
 }) => {
-  const [inspectMode, setInspectMode] = useState<TransparencyInspectMode>('completed');
+  const [inspectMode, setInspectMode] = useState<TransparencyInspectMode>('live');
   const [isStreaming, setIsStreaming] = useState<boolean>(true);
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>('evt_tr_01');
   const [selectedStageId, setSelectedStageId] = useState<string | undefined>('test_runner');

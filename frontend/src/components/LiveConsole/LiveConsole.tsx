@@ -21,7 +21,7 @@ interface LiveConsoleProps {
   runId?: string | null;
 }
 
-export const LiveConsole: React.FC<LiveConsoleProps> = ({ runId = 'sample-run' }) => {
+export const LiveConsole: React.FC<LiveConsoleProps> = ({ runId = '' }) => {
   const [useStaticPreview, setUseStaticPreview] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [autoScroll, setAutoScroll] = useState(true);

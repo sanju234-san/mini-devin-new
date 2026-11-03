@@ -9,6 +9,7 @@ import {
   FolderZipIcon,
   MonitoringIcon,
   EyeIcon,
+  BranchIcon,
 } from '../icons/Icons';
 
 interface SidebarProps {
@@ -58,6 +59,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'tests-and-preview',
       label: 'Tests & Preview',
       icon: <ScienceIcon className="w-[18px] h-[18px]" />,
+      isSupported: true,
+    },
+    {
+      id: 'pull-request',
+      label: 'Pull Request',
+      icon: <BranchIcon className="w-[18px] h-[18px]" />,
       isSupported: true,
     },
     {

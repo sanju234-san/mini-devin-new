@@ -148,32 +148,51 @@ export const SYNTHETIC_PREVIEW_PLAN: ImplementationPlanData = {
 
 /**
  * Normalizes incoming Plan payload from backend/LangGraph.
- * Seamlessly adapts Sanjeevni's authoritative Plan schema (docs/design/schemas.md §1)
+ * Seamlessly adapts Sanjeevni's authoritative ImplementationPlan schema
  * while preserving frontend-native ImplementationPlanData structures.
  */
 export function normalizePlanData(raw: any): ImplementationPlanData {
   if (!raw || typeof raw !== 'object') {
-    return raw;
+    return null as unknown as ImplementationPlanData;
   }
 
-  const version = raw.version || raw.version_id || 'v1';
+  const hasSteps = Array.isArray(raw.steps) && raw.steps.length > 0;
+  const hasContent = Boolean(raw.summary || raw.explanation || raw.rationale || raw.scope);
+  if (!hasSteps && !hasContent) {
+    return null as unknown as ImplementationPlanData;
+  }
+
+  const version = raw.version || raw.plan_version || raw.version_id || 'v1';
   const isDraft = raw.isDraft ?? (raw.status === 'draft' || raw.status === undefined);
   const sandboxed = raw.sandboxed ?? true;
-  const rationale = raw.rationale || raw.scope || 'Plan synthesized by Planner Agent.';
+  const rationale =
+    raw.rationale ||
+    raw.explanation ||
+    raw.summary ||
+    raw.scope ||
+    'Plan synthesized by Planner Agent.';
 
   // Normalize Issue Context
   const issue = raw.issue || {
-    title: raw.intent || 'Synthesized Implementation Plan',
-    description: raw.scope || raw.rationale || '',
-    priority: 'NORMAL',
-    labels: Array.isArray(raw.requirements)
-      ? raw.requirements.map((r: any) => r.id || 'REQ')
+    title: raw.summary || raw.intent || 'Synthesized Implementation Plan',
+    description: raw.explanation || raw.scope || raw.rationale || '',
+    priority: raw.estimated_complexity
+      ? `${String(raw.estimated_complexity).toUpperCase()} COMPLEXITY`
+      : 'NORMAL',
+    labels: Array.isArray(raw.requirements) && raw.requirements.length > 0
+      ? raw.requirements.map((r: any, idx: number) => r.id || `REQ-${idx + 1}`)
       : ['plan'],
   };
 
   // Normalize Affected Files
   let affectedFiles = raw.affectedFiles;
-  if (!affectedFiles && Array.isArray(raw.affected_files)) {
+  if (!affectedFiles && Array.isArray(raw.file_changes) && raw.file_changes.length > 0) {
+    affectedFiles = raw.file_changes.map((fc: any) => ({
+      path: fc.file_path || fc.path || String(fc),
+      status: String(fc.change_type || fc.action || 'MODIFIED').toUpperCase(),
+      targetScope: fc.summary || fc.rationale || 'Affected by plan',
+    }));
+  } else if (!affectedFiles && Array.isArray(raw.affected_files)) {
     affectedFiles = raw.affected_files.map((item: any) => {
       if (typeof item === 'string') {
         return {
@@ -190,11 +209,14 @@ export function normalizePlanData(raw: any): ImplementationPlanData {
   let steps = raw.steps;
   if (Array.isArray(steps)) {
     steps = steps.map((s: any, idx: number) => ({
-      stepNumber: s.stepNumber ?? idx + 1,
+      stepNumber: s.stepNumber ?? s.step_number ?? idx + 1,
       title: s.title || s.description || `Step ${idx + 1}`,
-      targetFile: s.targetFile || (Array.isArray(s.files) ? s.files[0] : undefined),
+      targetFile:
+        s.targetFile ||
+        s.target_file ||
+        (Array.isArray(s.files) && s.files.length > 0 ? s.files[0] : undefined),
       directive: s.directive || s.description,
-      action: s.action || 'Execute step',
+      action: s.action ? String(s.action).toUpperCase() : 'MODIFY',
       technicalImpact: s.technicalImpact,
       lineRange: s.lineRange,
     }));
@@ -202,10 +224,25 @@ export function normalizePlanData(raw: any): ImplementationPlanData {
     steps = [];
   }
 
+  // Normalize Risks
+  let risks = raw.risks;
+  if (!risks || !Array.isArray(risks) || risks.length === 0) {
+    const rawRisks: string[] = [
+      ...(Array.isArray(raw.risks_and_assumptions) ? raw.risks_and_assumptions : []),
+      ...(Array.isArray(raw.security_considerations) ? raw.security_considerations : []),
+    ];
+    risks = rawRisks.map((r, i) => ({
+      category: i < (raw.risks_and_assumptions?.length || 0) ? 'Risk & Assumption' : 'Security Check',
+      severity: 'EVALUATED',
+      description: typeof r === 'string' ? r : JSON.stringify(r),
+    }));
+  }
+
   // Normalize Verification Gates
   let verificationGates = raw.verificationGates;
-  if (!verificationGates && Array.isArray(raw.expected_tests)) {
-    verificationGates = raw.expected_tests.map((cmd: any) => ({
+  const cmdSource = raw.suggested_verification_commands || raw.expected_tests;
+  if (!verificationGates && Array.isArray(cmdSource)) {
+    verificationGates = cmdSource.map((cmd: any) => ({
       command: typeof cmd === 'string' ? cmd : String(cmd),
       description: 'Planned test suite verification',
       status: 'PLANNED' as const,
@@ -219,10 +256,10 @@ export function normalizePlanData(raw: any): ImplementationPlanData {
     rationale,
     steps,
     affectedFiles,
-    risks: raw.risks || [],
+    risks: risks || [],
     verificationGates,
     metadata: raw.metadata || {
-      plannerModel: 'Autonomous Planner',
+      plannerModel: raw.provenance || 'Autonomous Planner',
       agent: raw.author || 'Planner',
       version,
     },

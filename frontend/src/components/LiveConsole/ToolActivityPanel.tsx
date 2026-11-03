@@ -43,7 +43,11 @@ export const ToolActivityPanel: React.FC<ToolActivityPanelProps> = ({ events }) 
               const timeStr = evt.timestamp
                 ? new Date(evt.timestamp).toLocaleTimeString()
                 : 'Recent';
-              const isFinish = (evt.eventType || '').toLowerCase().includes('finish');
+              const evtTypeLower = (evt.eventType || '').toLowerCase();
+              const isFinish =
+                evtTypeLower.includes('finish') ||
+                evtTypeLower.includes('complete') ||
+                evtTypeLower.includes('pass');
 
               return (
                 <div

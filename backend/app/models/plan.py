@@ -60,7 +60,14 @@ class PlanDecisionIn(BaseModel):
     - Extra fields are rejected (extra='forbid') to catch client typos early.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {"decision": "approve", "reason": "Plan looks good"},
+            ]
+        },
+    )
 
     decision: Literal["approve", "edit", "reject"] = Field(
         ...,

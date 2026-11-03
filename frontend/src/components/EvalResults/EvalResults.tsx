@@ -28,7 +28,7 @@ interface EvalResultsProps {
 
 export const EvalResults: React.FC<EvalResultsProps> = ({
   onNavigateToDiff,
-  runId = 'run-8924a',
+  runId = '',
 }) => {
   // Mode: 'live' (binds to real backend API) vs 'preview' (explicit illustrative preview)
   const [dataMode, setDataMode] = useState<'live' | 'preview'>('live');
@@ -133,7 +133,7 @@ export const EvalResults: React.FC<EvalResultsProps> = ({
         <div className="flex items-center justify-between text-xs font-mono text-outline px-1">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${liveStatus === 'success' ? 'bg-emerald-400' : liveStatus === 'loading' ? 'bg-primary animate-pulse' : 'bg-amber-400'}`} />
-            <span>Live Data Mode: {liveStatus.toUpperCase()} (Connected to REST client GET /api/v1/metrics)</span>
+            <span>Live Data Mode: {liveStatus.toUpperCase()} (Connected to REST client GET /metrics)</span>
           </div>
           <button
             type="button"

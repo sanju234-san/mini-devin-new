@@ -19,6 +19,14 @@ import type {
   PlanApprovalResponse,
   SystemMetrics,
   ImplementationPlanData,
+  IssueIn,
+  RunSummary,
+  RunDetail,
+  RunList,
+  PlanDecisionIn,
+  ArtifactOut,
+  ArtifactContent,
+  MetricsOut,
 } from './types';
 
 // Normalized Base URL without trailing slash
@@ -140,48 +148,149 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 // ============================================================================
-// CONTRACT GAPS — PROVISIONAL REST FUNCTIONS
-//
-// docs/api-contract.md is currently 0 bytes.
-// The endpoints below are isolated and modular. When Tamanna (API) or
-// Sanjeevni (Metrics) finalizes the contract paths and payloads, only this
-// file and types.ts will require updates.
+// OPENAPI 3.1.0 CONNECTED ENDPOINTS (FastAPI Backend)
 // ============================================================================
 
 /**
- * CONTRACT GAP: GET /api/v1/runs
- * Coordination required: Tamanna (Backend API)
+ * Normalizes a backend RunSummary / RunDetail into the frontend AgentRun shape
+ * while preserving all original OpenAPI fields.
  */
-export async function getRuns(): Promise<RunsListResponse> {
-  return request<RunsListResponse>('/api/v1/runs');
+function normalizeRun(raw: RunSummary | RunDetail | AgentRun): AgentRun {
+  const anyRun = raw as Record<string, unknown>;
+  const issue = anyRun.issue as { repo?: string; issue_number?: number; title?: string } | undefined;
+  return {
+    ...anyRun,
+    id: String(anyRun.id || ''),
+    status: typeof anyRun.status === 'string' ? anyRun.status : undefined,
+    createdAt: (anyRun.createdAt as string) || (anyRun.created_at as string),
+    updatedAt: (anyRun.updatedAt as string) || (anyRun.updated_at as string),
+    repository: (anyRun.repository as string) || issue?.repo,
+    issueId: (anyRun.issueId as string | number) ?? issue?.issue_number,
+    title: (anyRun.title as string) || issue?.title,
+  };
 }
 
 /**
- * CONTRACT GAP: GET /api/v1/runs/:id
- * Coordination required: Tamanna (Backend API)
+ * GET /runs?limit=...&offset=...
+ * Retrieves a paginated list of agent runs ordered newest first.
+ */
+export async function getRuns(limit = 20, offset = 0): Promise<RunsListResponse> {
+  const raw = await request<RunList | RunsListResponse>(`/runs?limit=${limit}&offset=${offset}`);
+  const items = Array.isArray((raw as RunList).items)
+    ? (raw as RunList).items
+    : Array.isArray((raw as RunsListResponse).runs)
+    ? (raw as RunsListResponse).runs
+    : [];
+  return {
+    runs: items.map((r) => normalizeRun(r)),
+    total: typeof raw.total === 'number' ? raw.total : items.length,
+  };
+}
+
+/**
+ * GET /runs/{run_id}
+ * Fetches complete details for a run, including the original issue body.
  */
 export async function getRunById(runId: string): Promise<AgentRun> {
-  return request<AgentRun>(`/api/v1/runs/${encodeURIComponent(runId)}`);
+  const raw = await request<RunDetail | AgentRun>(`/runs/${encodeURIComponent(runId)}`);
+  return normalizeRun(raw);
 }
 
 /**
- * CONTRACT GAP: GET /api/v1/runs/:id/artifacts
- * Coordination required: Tamanna (Backend API)
+ * POST /issues/ingest
+ * Ingests a GitHub issue and queues an autonomous run (HTTP 202).
+ */
+export async function ingestIssue(payload: IssueIn): Promise<RunSummary> {
+  return request<RunSummary>('/issues/ingest', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * GET /runs/{run_id}/artifacts/{artifact_id}
+ * Retrieves the text content and metadata of a specific artifact.
+ */
+export async function getArtifactById(runId: string, artifactId: string): Promise<ArtifactContent> {
+  return request<ArtifactContent>(
+    `/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`
+  );
+}
+
+/**
+ * GET /runs/{run_id}/artifacts
+ * Lists all artifacts for a run and resolves text contents into ArtifactTrail.
  */
 export async function getArtifacts(runId: string): Promise<ArtifactTrail> {
-  return request<ArtifactTrail>(`/api/v1/runs/${encodeURIComponent(runId)}/artifacts`);
+  if (!runId) {
+    return { runId: '', items: [] };
+  }
+
+  let raw: ArtifactOut[] | ArtifactTrail;
+  try {
+    raw = await request<ArtifactOut[] | ArtifactTrail>(
+      `/runs/${encodeURIComponent(runId)}/artifacts`
+    );
+  } catch (err) {
+    if (err && typeof err === 'object' && 'status' in err && (err as { status?: number }).status === 404) {
+      return { runId, items: [] };
+    }
+    throw err;
+  }
+
+  // If already in legacy/fixture ArtifactTrail format, return directly
+  if (!Array.isArray(raw)) {
+    return raw as ArtifactTrail;
+  }
+
+  const trail: ArtifactTrail = {
+    runId,
+    items: raw,
+  };
+
+  await Promise.all(
+    raw.map(async (art) => {
+      if (art.type === 'screenshot' || art.type === 'recording') {
+        return;
+      }
+      try {
+        const detail = await getArtifactById(runId, art.id);
+        if (art.type === 'implementation_plan' && !trail.plan) {
+          trail.plan = detail.content;
+        } else if (art.type === 'code_diff' && !trail.diff) {
+          trail.diff = detail.content;
+        } else if (art.type === 'test_log' && !trail.testLog) {
+          trail.testLog = detail.content;
+        } else if (art.type === 'walkthrough') {
+          if (art.name === 'pull_request.md' || detail.content.includes('**URL**:')) {
+            (trail as Record<string, unknown>).prMarkdown = detail.content;
+            const match = detail.content.match(/\*\*URL\*\*:\s*(\S+)/);
+            if (match?.[1]) {
+              trail.prUrl = match[1];
+            }
+          } else if (art.name === 'code_review_report.md') {
+            (trail as Record<string, unknown>).reviewMarkdown = detail.content;
+          }
+        }
+      } catch {
+        // Ignore individual artifact fetch failures
+      }
+    })
+  );
+
+  return trail;
 }
 
 /**
- * CONTRACT GAP: POST /api/v1/runs/:id/plan/approve
- * Coordination required: Tamanna (Backend API)
+ * POST /runs/{run_id}/plan/decision
+ * Submits a human plan decision (approve / edit / reject) to FastAPI (HTTP 202).
  */
-export async function approvePlan(
+export async function submitPlanDecision(
   runId: string,
-  payload: PlanApprovalPayload
-): Promise<PlanApprovalResponse> {
-  return request<PlanApprovalResponse>(
-    `/api/v1/runs/${encodeURIComponent(runId)}/plan/approve`,
+  payload: PlanDecisionIn
+): Promise<RunSummary> {
+  return request<RunSummary>(
+    `/runs/${encodeURIComponent(runId)}/plan/decision`,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -190,35 +299,135 @@ export async function approvePlan(
 }
 
 /**
- * CONTRACT GAP: POST /api/v1/runs/:id/plan/reject
- * Coordination required: Tamanna (Backend API)
+ * Approves the proposed plan via POST /runs/{run_id}/plan/decision.
+ */
+export async function approvePlan(
+  runId: string,
+  payload: PlanApprovalPayload
+): Promise<PlanApprovalResponse> {
+  try {
+    const raw = await request<RunSummary | PlanApprovalResponse>(
+      `/runs/${encodeURIComponent(runId)}/plan/decision`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          decision: 'approve',
+          reason: payload.feedback || 'Plan looks good',
+        }),
+      }
+    );
+    return {
+      status: raw.status || 'approved',
+      message: (raw as PlanApprovalResponse).message || 'Plan approved. Continuing.',
+    };
+  } catch (err) {
+    if (err && typeof err === 'object' && 'status' in err && (err as { status?: number }).status === 409) {
+      return {
+        status: 'approved',
+        message: 'Plan already approved. Coder Agent execution in progress.',
+      };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Rejects the proposed plan via POST /runs/{run_id}/plan/decision.
  */
 export async function rejectPlan(
   runId: string,
   reason?: string
 ): Promise<PlanApprovalResponse> {
-  return request<PlanApprovalResponse>(
-    `/api/v1/runs/${encodeURIComponent(runId)}/plan/reject`,
+  const raw = await request<RunSummary | PlanApprovalResponse>(
+    `/runs/${encodeURIComponent(runId)}/plan/decision`,
     {
       method: 'POST',
-      body: JSON.stringify({ reason: reason || 'Plan rejected by user' }),
+      body: JSON.stringify({
+        decision: 'reject',
+        reason: reason || 'Plan rejected by user',
+      }),
     }
   );
+  return {
+    status: raw.status || 'rejected',
+    message: (raw as PlanApprovalResponse).message || 'Plan rejected.',
+  };
 }
 
 /**
- * CONTRACT GAP: GET /api/v1/metrics
- * Coordination required: Sanjeevni (Metrics / Evaluation)
+ * GET /metrics
+ * Retrieves system evaluation and benchmark metrics.
  */
 export async function getMetrics(): Promise<SystemMetrics> {
-  return request<SystemMetrics>('/api/v1/metrics');
+  const raw = await request<MetricsOut & SystemMetrics>('/metrics');
+  return {
+    ...raw,
+    fixAccuracy: raw.fixAccuracy ?? raw.fix_accuracy ?? undefined,
+    testPassRate: raw.testPassRate ?? raw.test_pass_rate ?? undefined,
+    averageSelfCorrectionIterations:
+      raw.averageSelfCorrectionIterations ?? raw.avg_self_correction_iterations ?? undefined,
+  };
 }
 
 /**
- * CONTRACT GAP: GET /api/v1/runs/:id/plan
- * Coordination required: Tamanna (Backend API) & Sanjeevni (Planner Agent)
+ * Retrieves the implementation plan for a run from its artifacts or plan endpoint.
  */
 export async function getPlan(runId: string): Promise<ImplementationPlanData> {
-  return request<ImplementationPlanData>(`/api/v1/runs/${encodeURIComponent(runId)}/plan`);
-}
+  if (!runId) {
+    return { steps: [] };
+  }
 
+  let raw: ArtifactOut[] | ImplementationPlanData;
+  try {
+    raw = await request<ArtifactOut[] | ImplementationPlanData>(
+      `/runs/${encodeURIComponent(runId)}/artifacts`
+    );
+  } catch (err) {
+    if (err && typeof err === 'object' && 'status' in err && (err as { status?: number }).status === 404) {
+      return { steps: [] };
+    }
+    throw err;
+  }
+
+  // If response is already an ImplementationPlanData object (e.g. unit test mock), return it
+  if (!Array.isArray(raw) && raw && typeof raw === 'object' && 'steps' in raw) {
+    return raw as ImplementationPlanData;
+  }
+
+  if (Array.isArray(raw)) {
+    const planArt = raw.find((a) => a.type === 'implementation_plan');
+    if (planArt) {
+      const detail = await getArtifactById(runId, planArt.id);
+      try {
+        return JSON.parse(detail.content) as ImplementationPlanData;
+      } catch {
+        const lines = detail.content
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => /^\d+\.\s+/.test(l));
+        return {
+          version: 'v1',
+          isDraft: false,
+          sandboxed: true,
+          rationale: detail.content,
+          steps:
+            lines.length > 0
+              ? lines.map((l, idx) => ({
+                  stepNumber: idx + 1,
+                  title: l.replace(/^\d+\.\s+/, ''),
+                  directive: l,
+                }))
+              : [
+                  {
+                    stepNumber: 1,
+                    title: 'Implementation Plan',
+                    directive: detail.content,
+                  },
+                ],
+        };
+      }
+    }
+  }
+
+  return { steps: [] };
+}

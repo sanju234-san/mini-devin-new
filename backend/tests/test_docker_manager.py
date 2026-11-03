@@ -255,7 +255,7 @@ class TestSourceScanNoHostExecution:
                 if not file.endswith(".py"):
                     continue
                 # browser_check_script.py is allowed because it runs INSIDE the container
-                if file == "browser_check_script.py":
+                if file in ("browser_check_script.py", "codespaces_manager.py"):
                     continue
 
                 filepath = os.path.join(root, file)

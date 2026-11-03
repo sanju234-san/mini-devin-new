@@ -20,12 +20,12 @@ type PreviewMode =
   | 'live';
 
 export const ConnectionMonitorSection: React.FC = () => {
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('DISCONNECTED');
-  const [selectedRunId] = useState<string>('sample-run');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('live');
+  const [selectedRunId] = useState<string>('');
 
   // Real hook instance
   const liveSocket = useAgentRunSocket(selectedRunId, {
-    autoConnect: false, // User can manually trigger live connection or preview
+    autoConnect: true,
     bufferCap: 500,
   });
 

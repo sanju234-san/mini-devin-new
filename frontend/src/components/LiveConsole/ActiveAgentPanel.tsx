@@ -14,8 +14,13 @@ export const ActiveAgentPanel: React.FC<ActiveAgentPanelProps> = ({
     (latestEvent?.payload as { message?: string })?.message ||
     (latestEvent?.payload as { details?: string })?.details ||
     (latestEvent ? `Executing ${latestEvent.eventType || 'event'}` : 'Awaiting agent activity');
-  const activeModel = latestEvent?.model || 'n/a';
-  const activeTool = latestEvent?.tool || 'None';
+  const activeModel = latestEvent?.model || latestEvent?.model_info?.name || 'n/a';
+  const activeTool = latestEvent?.tool || latestEvent?.tool_name || 'None';
+  const payloadTokens = (
+    latestEvent?.payload as { tokens?: { input_tokens?: number; output_tokens?: number } }
+  )?.tokens;
+  const promptTokens = latestEvent?.tokens?.input_tokens ?? payloadTokens?.input_tokens;
+  const completionTokens = latestEvent?.tokens?.output_tokens ?? payloadTokens?.output_tokens;
 
   return (
     <div className="rounded-xl bg-surface-container-low border border-outline-variant/30 p-space-md flex flex-col justify-between shadow-sm">
@@ -58,7 +63,7 @@ export const ActiveAgentPanel: React.FC<ActiveAgentPanelProps> = ({
           {description}
         </div>
 
-        {/* 2x2 Telemetry Grid (Real or n/a) */}
+        {/* 2x2 Telemetry Grid */}
         <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
           {/* Active Model */}
           <div className="p-2 rounded bg-surface-container border border-outline-variant/15 flex flex-col">
@@ -80,20 +85,24 @@ export const ActiveAgentPanel: React.FC<ActiveAgentPanelProps> = ({
             </span>
           </div>
 
-          {/* Prompt Tokens (Contract gap: n/a) */}
+          {/* Prompt Tokens */}
           <div className="p-2 rounded bg-surface-container border border-outline-variant/15 flex flex-col">
             <span className="text-[10px] text-outline uppercase tracking-wider">
               Prompt Tokens
             </span>
-            <span className="text-outline-variant mt-0.5">n/a</span>
+            <span className="font-semibold text-on-surface mt-0.5">
+              {promptTokens !== undefined ? promptTokens.toLocaleString() : 'n/a'}
+            </span>
           </div>
 
-          {/* Completion Tokens (Contract gap: n/a) */}
+          {/* Completion Tokens */}
           <div className="p-2 rounded bg-surface-container border border-outline-variant/15 flex flex-col">
             <span className="text-[10px] text-outline uppercase tracking-wider">
               Completion
             </span>
-            <span className="text-outline-variant mt-0.5">n/a</span>
+            <span className="font-semibold text-emerald-400 mt-0.5">
+              {completionTokens !== undefined ? completionTokens.toLocaleString() : 'n/a'}
+            </span>
           </div>
         </div>
       </div>

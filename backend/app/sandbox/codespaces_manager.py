@@ -527,6 +527,23 @@ class CodespacesSandboxManager(SandboxManager):
                     errors="replace",
                     timeout=req.timeout_seconds,
                 )
+                combined_out = f"{proc.stdout}\n{proc.stderr}"
+                if proc.returncode != 0 and "No module named pytest" in combined_out:
+                    logger.info("pytest not pre-installed in cloud codespace '%s'; installing pytest and running suite.", cs_name)
+                    pytest_cmd = shlex.join(req.argv)
+                    fallback_remote_cmd = (
+                        f"{cd_prefix}python -m pip install -q pytest && "
+                        f"(if [ -f package.json ] && [ ! -d dist ]; then (npm run build --if-present >/dev/null 2>&1 || true); fi) && "
+                        f"if [ ! -d dist ] && [ -d tests/support ]; then {pytest_cmd} --ignore=tests/support; else {pytest_cmd}; fi"
+                    )
+                    proc = subprocess.run(
+                        [_resolve_gh_bin(), "cs", "ssh", "-c", cs_name, "--", fallback_remote_cmd],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=max(req.timeout_seconds, 90),
+                    )
                 duration_ms = int((time.perf_counter() - start_time) * 1000)
                 stdout = proc.stdout[:MAX_OUTPUT_BYTES]
                 stderr = proc.stderr[:MAX_OUTPUT_BYTES]

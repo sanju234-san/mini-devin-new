@@ -64,9 +64,12 @@ def test_runner_node(state: AgentState) -> dict[str, Any]:
         sandbox_id = None
 
         try:
+            from app.agents.tools.repo_tools import parse_diff_header_paths
             from app.sandbox import (
+                DiffApplyFailedError,
                 DiffApplyRequest,
                 HostExecutionBlockedError,
+                InvalidRequestError,
                 SandboxCreateRequest,
                 SandboxUnavailableError,
                 TestRunRequest,
@@ -83,27 +86,62 @@ def test_runner_node(state: AgentState) -> dict[str, Any]:
             apply_failed = False
             apply_errors: list[str] = []
             for c in (code_changes if isinstance(code_changes, list) else [code_changes]):
-                d_text = c.get("diff_text") if isinstance(c, dict) else getattr(c, "diff_text", "")
+                d_text = (
+                    (c.get("diff_text") or c.get("diff") or "")
+                    if isinstance(c, dict)
+                    else (getattr(c, "diff_text", None) or getattr(c, "diff", "") or "")
+                )
+                c_path = (
+                    (c.get("path") or c.get("file_path") or "")
+                    if isinstance(c, dict)
+                    else (getattr(c, "path", None) or getattr(c, "file_path", "") or "")
+                )
                 if d_text:
-                    apply_resp = sb.apply_diff(DiffApplyRequest(sandbox_id=sandbox_id, diff_text=d_text))
-                    if not apply_resp.success:
-                        logger.warning("Sandbox diff apply warning: %s", apply_resp.error)
+                    # Auto-repair missing unified diff headers if path is known on the change object
+                    norm_c_path = str(c_path).strip().replace("\\", "/")
+                    if norm_c_path and not parse_diff_header_paths(str(d_text)):
+                        raw_lines = str(d_text).strip().splitlines()
+                        if any(line.startswith("@@") for line in raw_lines):
+                            d_text = f"--- a/{norm_c_path}\n+++ b/{norm_c_path}\n{d_text.strip()}\n"
+                        else:
+                            plus_body = "\n".join(
+                                line if line.startswith(("+", "-", " ")) else f"+{line}"
+                                for line in raw_lines
+                            )
+                            d_text = (
+                                f"--- a/{norm_c_path}\n"
+                                f"+++ b/{norm_c_path}\n"
+                                f"@@ -0,0 +1,{len(raw_lines)} @@\n"
+                                f"{plus_body}\n"
+                            )
+                    try:
+                        apply_resp = sb.apply_diff(DiffApplyRequest(sandbox_id=sandbox_id, diff_text=d_text))
+                        if not apply_resp.success:
+                            logger.warning("Sandbox diff apply warning: %s", apply_resp.error)
+                            apply_failed = True
+                            if apply_resp.error:
+                                apply_errors.append(apply_resp.error)
+                    except (InvalidRequestError, DiffApplyFailedError) as diff_exc:
+                        logger.warning("Sandbox diff apply rejected invalid patch: %s", diff_exc)
                         apply_failed = True
-                        if apply_resp.error:
-                            apply_errors.append(apply_resp.error)
+                        apply_errors.append(str(diff_exc))
 
             workspace_path = state.get("workspace_path") or state.get("snapshot_path")
             test_cmd = ["python", "-m", "pytest", "-q"] if (workspace_path and (Path(workspace_path) / "tests").is_dir()) else ["python", "-c", "print('Mini-Devin verification tests passed in sandbox.')"]
 
-            # Run verification command
-            run_resp = sb.run_tests(TestRunRequest(
-                sandbox_id=sandbox_id,
-                argv=test_cmd,
-                timeout_seconds=30,
-            ))
+            if apply_failed:
+                test_run_success = False
+                details = "; ".join(apply_errors) if apply_errors else "Sandbox diff apply failed."
+            else:
+                # Run verification command
+                run_resp = sb.run_tests(TestRunRequest(
+                    sandbox_id=sandbox_id,
+                    argv=test_cmd,
+                    timeout_seconds=30,
+                ))
 
-            test_run_success = (run_resp.exit_code == 0) and not apply_failed
-            details = run_resp.stdout if test_run_success else (run_resp.stderr or ("; ".join(apply_errors) if apply_errors else "Tests failed in sandbox"))
+                test_run_success = (run_resp.exit_code == 0) and not apply_failed
+                details = run_resp.stdout if test_run_success else (run_resp.stderr or "Tests failed in sandbox")
 
         except (HostExecutionBlockedError, SandboxUnavailableError) as exc:
             logger.warning("Sandbox unavailable or host execution blocked: %s", exc)

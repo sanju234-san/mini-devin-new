@@ -11,7 +11,7 @@ import { API_BASE_URL } from '../../config/env';
 type PreviewMode = 'overview' | 'loading' | 'empty' | 'error' | 'live';
 
 export const RestClientStateSection: React.FC = () => {
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('overview');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('live');
 
   // Live request state driven by real api.ts call
   const [liveState, setLiveState] = useState<RequestState<RunsListResponse>>({
@@ -142,7 +142,7 @@ export const RestClientStateSection: React.FC = () => {
           <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-semibold">
             ENDPOINT
           </span>
-          <span className="text-on-surface">GET /api/v1/runs</span>
+          <span className="text-on-surface">GET /runs</span>
           <span className="text-outline-variant">|</span>
           <span className="text-outline-variant text-[11px]">
             Target Base: {API_BASE_URL}

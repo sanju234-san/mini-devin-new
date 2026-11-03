@@ -6,9 +6,11 @@ from app.sandbox.codespaces_manager import (
     get_sandbox_manager,
 )
 from app.sandbox.models import (
+    DiffApplyFailedError,
     DiffApplyRequest,
     DiffApplyResponse,
     HostExecutionBlockedError,
+    InvalidRequestError,
     SandboxCreateRequest,
     SandboxCreateResponse,
     SandboxError,
@@ -19,9 +21,11 @@ from app.sandbox.models import (
 
 __all__ = [
     "CodespacesSandboxManager",
+    "DiffApplyFailedError",
     "DiffApplyRequest",
     "DiffApplyResponse",
     "HostExecutionBlockedError",
+    "InvalidRequestError",
     "SandboxCreateRequest",
     "SandboxCreateResponse",
     "SandboxError",

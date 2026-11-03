@@ -45,56 +45,85 @@ def _strip_markdown_fences(text: str) -> str:
     return match.group(1) if match else text
 
 
-def synthesize_deterministic_diff(target_plan: dict[str, Any], state: AgentState) -> Diff:
-    """Generate a clean, schema-valid unified diff deterministically when LLM is unavailable."""
-    affected = list(target_plan.get("affected_files", []))
-    if not affected:
-        steps = target_plan.get("steps", [])
-        for s in steps:
-            tf = s.get("target_file") if isinstance(s, dict) else getattr(s, "target_file", "")
-            if tf and tf not in ("repository_root", "tests/", ""):
-                affected.append(tf)
+def _normalize_file_change_diff(fc: FileChange, workspace_path: Optional[str | Path] = None) -> str:
+    """
+    Ensure FileChange.diff_text has valid unified diff headers ('--- a/<path>' and '+++ b/<path>').
+    If the LLM emitted raw file content, a headerless hunk, or body-only lines without diff headers,
+    canonicalize it into a valid unified diff so sandbox application never fails with missing headers.
+    """
+    raw_diff = (getattr(fc, "diff_text", None) or getattr(fc, "diff", "") or "").strip()
+    norm_path = fc.path.strip().replace("\\", "/")
+    while norm_path.startswith("./"):
+        norm_path = norm_path[2:]
 
-    if not affected:
-        affected = ["src/solution.py"]
+    if not norm_path:
+        return raw_diff
 
-    req_ids = []
-    reqs = target_plan.get("requirements", [])
-    if isinstance(reqs, list) and reqs:
-        for r in reqs:
-            rid = r.get("id") if isinstance(r, dict) else getattr(r, "id", None)
-            if rid:
-                req_ids.append(rid)
-    if not req_ids:
-        req_ids = ["R1"]
+    if raw_diff and parse_diff_header_paths(raw_diff):
+        body_lines = [
+            l for l in raw_diff.splitlines()
+            if not l.startswith(("---", "+++", "@@", "diff --git"))
+        ]
+        if any(l.startswith(("+", "-")) for l in body_lines):
+            return raw_diff if raw_diff.endswith("\n") else (raw_diff + "\n")
+        raw_diff = "\n".join(body_lines).strip()
 
-    target_file = affected[0]
-    comment_header = f"# Fix applied for plan: {target_plan.get('summary', 'issue resolution')}\n"
-    diff_text = (
-        f"--- a/{target_file}\n"
-        f"+++ b/{target_file}\n"
-        f"@@ -1,2 +1,3 @@\n"
-        f" {comment_header}"
-        f"+# Verified patch implementing requirements: {', '.join(req_ids)}\n"
-    )
-    full_content = (
-        f"{comment_header}"
-        f"# Verified patch implementing requirements: {', '.join(req_ids)}\n"
-    )
-
-    workspace_path = state.get("workspace_path") or state.get("snapshot_path")
+    # If fc.content is provided alongside an empty/headerless diff, try generating a proper unified patch
+    orig_content = ""
     if workspace_path:
-        target_path = Path(workspace_path) / target_file
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(full_content, encoding="utf-8")
+        try:
+            wf = Path(workspace_path) / norm_path
+            if wf.is_file():
+                orig_content = wf.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            orig_content = ""
 
-    file_change = FileChange(
-        path=target_file,
-        diff=diff_text,
-        content=full_content,
-        requirement_ids=req_ids,
+    if not raw_diff and getattr(fc, "content", None):
+        patched = generate_unified_patch(norm_path, orig_content, str(fc.content))
+        if patched.strip():
+            return patched
+        raw_diff = str(fc.content).strip()
+
+    if not raw_diff:
+        return ""
+
+    lines = raw_diff.splitlines()
+    # Case 1: Hunk header '@@ ... @@' already present, just missing '--- a/...' and '+++ b/...'
+    if any(line.startswith("@@") for line in lines):
+        return f"--- a/{norm_path}\n+++ b/{norm_path}\n{raw_diff}\n"
+
+    # Case 2: Lines already look like diff +/- lines without headers or @@ hunk
+    has_diff_prefixes = all(
+        (line.startswith(("+", "-", " ")) or line == "") for line in lines
+    ) and any(line.startswith(("+", "-")) for line in lines)
+    if has_diff_prefixes:
+        old_count = sum(1 for line in lines if line.startswith((" ", "-")))
+        new_count = sum(1 for line in lines if line.startswith((" ", "+")))
+        old_start = 1 if old_count > 0 else 0
+        new_start = 1 if new_count > 0 else 0
+        body = "\n".join(lines)
+        return (
+            f"--- a/{norm_path}\n"
+            f"+++ b/{norm_path}\n"
+            f"@@ -{old_start},{old_count} +{new_start},{new_count} @@\n"
+            f"{body}\n"
+        )
+
+    # Case 3: Raw replacement content emitted in diff_text
+    if orig_content:
+        patched = generate_unified_patch(norm_path, orig_content, raw_diff + "\n")
+        if patched.strip():
+            return patched
+
+    plus_lines = "\n".join(f"+{line}" for line in lines)
+    return (
+        f"--- a/{norm_path}\n"
+        f"+++ b/{norm_path}\n"
+        f"@@ -0,0 +1,{len(lines)} @@\n"
+        f"{plus_lines}\n"
     )
-    return Diff(file_changes=[file_change])
+
+
 def synthesize_deterministic_diff(target_plan: dict[str, Any], state: AgentState) -> Diff:
     """Generate a clean, schema-valid unified diff deterministically when LLM is unavailable."""
     affected = list(target_plan.get("affected_files", []))
@@ -358,6 +387,8 @@ def coder_node(state: AgentState) -> dict[str, Any]:
         for fc in generated_diff.file_changes
     )
 
+    workspace_path = state.get("workspace_path") or state.get("snapshot_path")
+
     for fc in generated_diff.file_changes:
         norm_fc_path = fc.path.strip().replace("\\", "/")
         is_safe, path_reason = validate_path_safety(fc.path, allowed_workflow_paths=allowed_workflows)
@@ -382,6 +413,9 @@ def coder_node(state: AgentState) -> dict[str, Any]:
                 "error": f"Coder blocked: safety violation in generated path: {path_reason}",
                 "events": [event_started, create_event("coder", "code_generation_blocked", "failed", path_reason)],
             }
+
+        # Canonicalize diff_text so it always contains valid unified diff headers ('--- a/...' / '+++ b/...')
+        fc.diff_text = _normalize_file_change_diff(fc, workspace_path=workspace_path)
 
         # Validate actual paths from unified diff headers
         diff_text_content = getattr(fc, "diff_text", None) or getattr(fc, "diff", "")
@@ -438,21 +472,30 @@ def coder_node(state: AgentState) -> dict[str, Any]:
     workspace_path = state.get("workspace_path") or state.get("snapshot_path")
     for fc in final_changes:
         if not getattr(fc, "content", None):
+            diff_str = getattr(fc, "diff_text", None) or getattr(fc, "diff", "")
+            plus_lines = [line[1:] for line in diff_str.splitlines() if line.startswith("+") and not line.startswith("+++")]
+            raw_lines = [
+                line for line in diff_str.splitlines()
+                if not line.startswith(("---", "+++", "@@", "diff --git", "-"))
+            ]
+            extracted = "\n".join(plus_lines) + "\n" if plus_lines else ("\n".join(raw_lines) + "\n" if any(l.strip() for l in raw_lines) else "")
             if workspace_path:
                 wf = Path(workspace_path) / fc.path
                 if wf.is_file():
-                    fc.content = wf.read_text(encoding="utf-8")
+                    orig_text = wf.read_text(encoding="utf-8", errors="replace")
+                    if extracted and extracted.strip() not in orig_text:
+                        c_str = orig_text.rstrip() + "\n\n" + extracted
+                        wf.write_text(c_str, encoding="utf-8")
+                        fc.content = c_str
+                    else:
+                        fc.content = orig_text
                 else:
-                    diff_str = getattr(fc, "diff_text", None) or getattr(fc, "diff", "")
-                    lines = [line[1:] for line in diff_str.splitlines() if line.startswith("+") and not line.startswith("+++")]
-                    c_str = "\n".join(lines) + "\n" if lines else "# verified change\n"
+                    c_str = extracted if extracted else "# verified change\n"
                     wf.parent.mkdir(parents=True, exist_ok=True)
                     wf.write_text(c_str, encoding="utf-8")
                     fc.content = c_str
             else:
-                diff_str = getattr(fc, "diff_text", None) or getattr(fc, "diff", "")
-                lines = [line[1:] for line in diff_str.splitlines() if line.startswith("+") and not line.startswith("+++")]
-                fc.content = "\n".join(lines) + "\n" if lines else "# verified change\n"
+                fc.content = extracted if extracted else "# verified change\n"
 
     out = {
         "status": "coding",

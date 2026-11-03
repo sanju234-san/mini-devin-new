@@ -23,7 +23,7 @@ interface ArtifactTrailViewerProps {
 }
 
 export const ArtifactTrailViewer: React.FC<ArtifactTrailViewerProps> = ({
-  runId = 'run-8924a',
+  runId = '',
   onNavigateToDiff,
   onNavigateToTests,
 }) => {
@@ -47,6 +47,12 @@ export const ArtifactTrailViewer: React.FC<ArtifactTrailViewerProps> = ({
   // Attempt to fetch real artifacts from Task 2 API client
   useEffect(() => {
     let isMounted = true;
+    if (!runId) {
+      setLiveArtifacts(null);
+      return () => {
+        isMounted = false;
+      };
+    }
     getArtifacts(runId)
       .then((data) => {
         if (isMounted && data) {
@@ -124,7 +130,7 @@ export const ArtifactTrailViewer: React.FC<ArtifactTrailViewerProps> = ({
       return items;
     }
 
-    return SAMPLE_ARTIFACTS;
+    return [];
   }, [inspectState, liveArtifacts]);
 
   // Filter artifacts by search query and type
@@ -232,7 +238,30 @@ export const ArtifactTrailViewer: React.FC<ArtifactTrailViewerProps> = ({
         /* 5. Active Preview State */
         <div className="flex flex-col gap-space-md">
           {/* Summary Metric Strip */}
-          <ArtifactMetricsStrip metrics={SAMPLE_METRICS} />
+          <ArtifactMetricsStrip
+            metrics={{
+              totalArtifacts: baseArtifacts.length,
+              indexedPercentage: baseArtifacts.length > 0 ? 100 : 0,
+              plansAndDocsCount: baseArtifacts.filter((a) => a.type === 'plan').length,
+              plansAndDocsSize: `${(
+                baseArtifacts
+                  .filter((a) => a.type === 'plan')
+                  .reduce((acc, a) => acc + a.sizeBytes, 0) / 1024
+              ).toFixed(1)} KB`,
+              codeChangesCount: baseArtifacts.filter((a) => a.type === 'patch').length,
+              codeChangesDelta: baseArtifacts.some((a) => a.type === 'patch') ? 'Live Patch' : '0',
+              testReportsCount: baseArtifacts.filter((a) => a.type === 'log' || a.type === 'test_suite').length,
+              testReportsFormat: 'Log',
+              screenshotsCount: baseArtifacts.filter((a) => a.type === 'image').length,
+              screenshotsLabel: 'Screenshots',
+              astAndLogsCount: baseArtifacts.filter((a) => a.type === 'log').length,
+              astAndLogsLabel: 'Logs',
+              totalSizeMb: Number(
+                (baseArtifacts.reduce((acc, a) => acc + a.sizeBytes, 0) / (1024 * 1024)).toFixed(2)
+              ),
+              quotaSizeMb: 50,
+            }}
+          />
 
           {/* Main Split View: Left List (5 cols) + Right Preview Pane (7 cols) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md items-stretch">

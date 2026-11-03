@@ -18,11 +18,9 @@ interface DiffViewerProps {
   runId?: string;
 }
 
-export const DiffViewer: React.FC<DiffViewerProps> = ({ runId = 'run-8924a' }) => {
-  // In production, force 'real' API mode strictly. In development, default to 'preview-active' for Stitch fidelity.
-  const [previewState, setPreviewState] = useState<DiffViewerState>(
-    isProduction ? 'real' : 'preview-active'
-  );
+export const DiffViewer: React.FC<DiffViewerProps> = ({ runId = '' }) => {
+  // Default strictly to 'real' API mode so no synthetic preview diff is shown.
+  const [previewState, setPreviewState] = useState<DiffViewerState>('real');
   const [renderMode, setRenderMode] = useState<DiffRenderMode>('inline');
   const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
 
@@ -36,6 +34,17 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ runId = 'run-8924a' }) =
 
   // Fetch real diff from existing API interfaces (getRunById + getArtifacts)
   const fetchRealDiff = useCallback(async () => {
+    if (!runId) {
+      setIsLoading(false);
+      setError(null);
+      setRealDiffData({
+        metadata: { runId: 'none' },
+        files: [],
+        totalAdditions: 0,
+        totalDeletions: 0,
+      });
+      return;
+    }
     setIsLoading(true);
     setError(null);
 

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Stored as a raw comma-separated string so pydantic-settings does not
     # attempt JSON-decoding the env var.  Use the ``cors_origins`` property
     # to get the parsed list.
-    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000"
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
     @classmethod

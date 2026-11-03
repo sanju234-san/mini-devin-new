@@ -8,7 +8,7 @@ import type {
 } from './types';
 import { SYNTHETIC_PREVIEW_PLAN, normalizePlanData } from './planApprovalUtils';
 import { getPlan, approvePlan, rejectPlan, getRunById } from '../../services/api';
-import type { ApiError } from '../../services/types';
+import type { ApiError, AgentRun } from '../../services/types';
 import { useAgentRunSocket } from '../../hooks/useAgentRunSocket';
 import { ApprovalBanner } from './ApprovalBanner';
 import { IssueContextCard } from './IssueContextCard';
@@ -25,7 +25,7 @@ interface PlanApprovalProps {
   runId?: string;
 }
 
-export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run' }) => {
+export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = '' }) => {
   // Dev Simulator State (gated to development)
   const [simulatorState, setSimulatorState] = useState<SimulatorState>('real');
 
@@ -49,20 +49,44 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
 
   // Fetch real plan and run details from API
   const fetchPlanData = useCallback(async () => {
+    if (!runId) {
+      setIsLoading(false);
+      setError(null);
+      setPlan(null);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
+      let runData: AgentRun | null = null;
       // 1. Fetch Run Status
       try {
-        const runData = await getRunById(runId);
+        runData = await getRunById(runId);
         setRunStatus(runData.status || null);
+        const curStep = (runData as Record<string, unknown>).current_step;
+        if (curStep === 'plan_approved' || runData.status === 'completed') {
+          setDecisionState('approved');
+        } else if (runData.status === 'rejected' || curStep === 'plan_rejected') {
+          setDecisionState('rejected');
+        }
       } catch {
         // Run endpoint may be pending in contract; keep non-fatal
       }
 
       // 2. Fetch Plan
       const planData = await getPlan(runId);
-      setPlan(normalizePlanData(planData));
+      const normalized = normalizePlanData(planData);
+      if (normalized && runData) {
+        normalized.issue = {
+          ...normalized.issue,
+          repository: runData.repository || normalized.issue?.repository,
+          issueNumber:
+            runData.issueId !== undefined ? Number(runData.issueId) : normalized.issue?.issueNumber,
+          title: runData.title || normalized.issue?.title || 'Synthesized Implementation Plan',
+          reporter: 'github-issue',
+        };
+      }
+      setPlan(normalized);
     } catch (err) {
       setError(err as ApiError);
       setPlan(null);
@@ -77,23 +101,28 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
     }
   }, [fetchPlanData, simulatorState]);
 
-  // Update status if a WebSocket event signals stage change
+  // Update status and re-fetch plan when WebSocket events signal Planner completion or approval gate
   useEffect(() => {
     if (events.length > 0) {
       const latest = events[events.length - 1];
       const type = (latest.eventType || '').toLowerCase();
-      if (type.includes('approval') || type.includes('interrupt') || type.includes('hold')) {
-        setRunStatus('awaiting_approval');
+      const agent = (latest.agent || '').toLowerCase();
+      if (
+        type.includes('approval') ||
+        type.includes('interrupt') ||
+        type.includes('hold') ||
+        agent.includes('planner')
+      ) {
+        fetchPlanData();
       }
     }
-  }, [events]);
+  }, [events, fetchPlanData]);
 
   // Handle Approve Action (Real)
   const handleApprove = async (feedback?: string) => {
     if (isSubmitting || decisionState === 'approved') return;
 
     if (simulatorState !== 'real') {
-      // In dev simulator mode, purely simulate UI transition without calling API
       setIsSubmitting(true);
       setDecisionState('submitting');
       setTimeout(() => {
@@ -131,7 +160,6 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
     if (isSubmitting || decisionState === 'rejected') return;
 
     if (simulatorState !== 'real') {
-      // In dev simulator mode, purely simulate UI transition without calling API
       setIsSubmitting(true);
       setDecisionState('submitting');
       setTimeout(() => {
@@ -167,7 +195,10 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
   let activeError: ApiError | null = error;
   let activeDecisionState = decisionState;
   let activeIsSubmitting = isSubmitting;
-  let isAwaitingApproval = runStatus === 'awaiting_approval';
+  let isAwaitingApproval =
+    runStatus === 'awaiting_approval' ||
+    runStatus === 'awaiting_plan_approval' ||
+    Boolean(plan && decisionState === 'idle');
 
   if (simulatorState === 'awaiting_approval') {
     activePlan = SYNTHETIC_PREVIEW_PLAN;
@@ -214,9 +245,9 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
 
   // Pipeline Status Stages
   const stages = [
-    { num: '01', name: 'Triage', status: 'completed' },
-    { num: '02', name: 'Retrieval', status: 'completed' },
-    { num: '03', name: 'Planner', status: 'completed' },
+    { num: '01', name: 'Triage', status: activePlan || isAwaitingApproval ? 'completed' : 'standby' },
+    { num: '02', name: 'Retrieval', status: activePlan || isAwaitingApproval ? 'completed' : 'standby' },
+    { num: '03', name: 'Planner', status: activePlan || isAwaitingApproval ? 'completed' : 'standby' },
     {
       num: '04',
       name: 'HUMAN APPROVAL',
@@ -263,7 +294,7 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
             </span>
           </div>
           <span className="text-[10px] text-outline font-mono">
-            {isAwaitingApproval ? 'PAUSED AT HUMAN APPROVAL GATE' : 'STANDBY'}
+            {isAwaitingApproval ? 'PAUSED AT HUMAN APPROVAL GATE' : (runStatus || 'STANDBY').toUpperCase()}
           </span>
         </div>
 
@@ -364,11 +395,22 @@ export const PlanApproval: React.FC<PlanApprovalProps> = ({ runId = 'sample-run'
             </svg>
           </div>
           <span className="font-semibold text-sm text-on-surface">
-            No Implementation Plan Registered
+            No Implementation Plan Registered Yet
           </span>
           <p className="text-xs text-on-surface-variant font-mono max-w-md">
-            The Planner Agent has not yet generated a plan for run <code className="text-primary">{runId}</code>, or the run has not reached Gate 01.
+            {runId
+              ? `Agents are currently analyzing the repository for run #${runId.slice(0, 8)} (${runStatus || 'running'}). The plan will appear here automatically once Planner reaches Gate 01.`
+              : 'Start an autonomous agent run from the Dashboard to generate an implementation plan.'}
           </p>
+          {runId && (
+            <button
+              type="button"
+              onClick={fetchPlanData}
+              className="mt-2 px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-mono border border-outline-variant/30 transition-colors cursor-pointer"
+            >
+              Refresh Status
+            </button>
+          )}
         </div>
       )}
 

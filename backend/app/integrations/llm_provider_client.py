@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 from groq import Groq
-import google as genai
+from google import genai
 from huggingface_hub import InferenceClient
 
 from app.config import GROQ_API_KEY, GOOGLE_AI_STUDIO_API_KEY, HUGGINGFACE_API_TOKEN
@@ -87,14 +87,23 @@ def _call_huggingface(prompt: str) -> str:
         raise RuntimeError("HUGGINGFACE_API_TOKEN not configured")
     client = InferenceClient(token=hf_token)
     model_name = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
-    response = client.text_generation(prompt, model=model_name, max_new_tokens=2048)
-    return response
+    try:
+        chat_resp = client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            max_tokens=2048,
+        )
+        return chat_resp.choices[0].message.content
+    except Exception:
+        return client.text_generation(prompt, model=model_name, max_new_tokens=2048)
 
 def _call_ollama(prompt: str) -> str:
     import httpx
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     model_name = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
-    # Call Ollama native generate endpoint with 16k context window configured
+    timeout_sec = float(os.getenv("OLLAMA_TIMEOUT", "300.0"))
+    num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+    # Call Ollama native generate endpoint
     resp = httpx.post(
         f"{base_url}/api/generate",
         json={
@@ -102,11 +111,11 @@ def _call_ollama(prompt: str) -> str:
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_ctx": 16384,
+                "num_ctx": num_ctx,
                 "temperature": 0.1,
             },
         },
-        timeout=120.0,
+        timeout=timeout_sec,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"Ollama returned HTTP {resp.status_code}: {resp.text}")

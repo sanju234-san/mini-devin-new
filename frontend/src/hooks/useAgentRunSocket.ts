@@ -3,21 +3,6 @@
  *
  * Architectural Boundary:
  * FastAPI WebSocket (Tamanna) -> useAgentRunSocket -> React Buffer -> Task 4 LiveConsole
- *
- * Consumer Contract for Task 4 (Live Agent Console):
- * ```typescript
- * const {
- *   connectionState, // 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED'
- *   readyState,      // 0 (CONNECTING), 1 (OPEN), 2 (CLOSING), 3 (CLOSED)
- *   events,          // Bounded FIFO buffer of received agent events
- *   latestEvent,     // Most recent envelope
- *   telemetry,       // Honest socket telemetry (uptime, counts, errors, target URI)
- *   connect,         // Manual connect/reconnect function
- *   disconnect,      // Manual disconnect function
- *   clearBuffer,     // Empties event buffer
- *   error            // Latest socket or transport error
- * } = useAgentRunSocket(runId, options);
- * ```
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -73,6 +58,7 @@ export function useAgentRunSocket(
 
   // Mutable refs for lifecycle and Strict Mode handling
   const socketRef = useRef<WebSocket | null>(null);
+  const activeUriRef = useRef<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const isManualCloseRef = useRef<boolean>(false);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -102,11 +88,16 @@ export function useAgentRunSocket(
     cleanupTimers();
     if (socketRef.current) {
       try {
+        socketRef.current.onopen = null;
+        socketRef.current.onmessage = null;
+        socketRef.current.onerror = null;
+        socketRef.current.onclose = null;
         socketRef.current.close(1000, 'Client closed connection');
       } catch {
         // Ignore errors during clean close
       }
       socketRef.current = null;
+      activeUriRef.current = null;
     }
   }, [cleanupTimers]);
 
@@ -118,12 +109,15 @@ export function useAgentRunSocket(
     isManualCloseRef.current = false;
     cleanupTimers();
 
-    if (
-      socketRef.current &&
-      (socketRef.current.readyState === WebSocket.OPEN ||
-        socketRef.current.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
+    if (socketRef.current) {
+      if (activeUriRef.current !== targetUri) {
+        closeSocket();
+      } else if (
+        socketRef.current.readyState === WebSocket.OPEN ||
+        socketRef.current.readyState === WebSocket.CONNECTING
+      ) {
+        return;
+      }
     }
 
     setConnectionState('CONNECTING');
@@ -133,6 +127,7 @@ export function useAgentRunSocket(
     try {
       const ws = new WebSocket(targetUri);
       socketRef.current = ws;
+      activeUriRef.current = targetUri;
 
       ws.onopen = () => {
         if (!isMountedRef.current) {
@@ -140,6 +135,7 @@ export function useAgentRunSocket(
           return;
         }
 
+        setError(null);
         setConnectionState('CONNECTED');
         setReadyState(1);
         reconnectAttemptRef.current = 0;
@@ -200,6 +196,10 @@ export function useAgentRunSocket(
 
         setLatestEvent(parsed);
         setEvents((prev) => {
+          // Deduplicate by event id if already in buffer
+          if (parsed.id && prev.some((e) => e.id === parsed.id)) {
+            return prev;
+          }
           const next = [...prev, parsed];
           if (next.length > bufferCap) {
             return next.slice(next.length - bufferCap);
@@ -212,7 +212,7 @@ export function useAgentRunSocket(
         }
       };
 
-      ws.onerror = (errEvent) => {
+      ws.onerror = () => {
         if (!isMountedRef.current) return;
         const err = new Error(`WebSocket error for ${targetUri}`);
         setError(err);
@@ -272,6 +272,7 @@ export function useAgentRunSocket(
     onEvent,
     onError,
     cleanupTimers,
+    closeSocket,
   ]);
 
   // Manual disconnect

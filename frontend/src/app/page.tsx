@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { DashboardHeader } from '../components/dashboard/DashboardHeader';
 import { EmptyStatePanel } from '../components/dashboard/EmptyStatePanel';
@@ -12,15 +12,51 @@ import { LiveConsole } from '../components/LiveConsole';
 import { PlanApproval } from '../components/PlanApproval';
 import { DiffViewer } from '../components/DiffViewer';
 import { TestsAndPreview } from '../components/TestsAndPreview';
+import { PullRequestPage } from '../components/PullRequest';
 import { ArtifactTrailViewer } from '../components/Artifacts';
 import { TransparencyDashboard } from '../components/Transparency';
 import { EvalResults } from '../components/EvalResults';
-import { TerminalIcon, GridIcon, ChecklistIcon, DiffIcon, ScienceIcon, FolderZipIcon, EyeIcon, MonitoringIcon } from '../components/icons/Icons';
+import { getRuns } from '../services/api';
+import {
+  TerminalIcon,
+  GridIcon,
+  ChecklistIcon,
+  DiffIcon,
+  ScienceIcon,
+  FolderZipIcon,
+  EyeIcon,
+  MonitoringIcon,
+  BranchIcon,
+} from '../components/icons/Icons';
 
-type NavView = 'dashboard' | 'live-console' | 'plan-approval' | 'diff-viewer' | 'tests-and-preview' | 'artifacts' | 'transparency' | 'evaluation';
+type NavView =
+  | 'dashboard'
+  | 'live-console'
+  | 'plan-approval'
+  | 'diff-viewer'
+  | 'tests-and-preview'
+  | 'pull-request'
+  | 'artifacts'
+  | 'transparency'
+  | 'evaluation';
 
 export default function DashboardPage() {
   const [activeNav, setActiveNav] = useState<NavView>('dashboard');
+  const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    getRuns(1, 0)
+      .then((res) => {
+        if (res.runs && res.runs.length > 0 && res.runs[0]?.id) {
+          setActiveRunId(res.runs[0].id);
+        } else {
+          setActiveRunId(undefined);
+        }
+      })
+      .catch(() => {
+        // Keep current fallback when backend is unreachable
+      });
+  }, [activeNav]);
 
   return (
     <AppShell
@@ -32,6 +68,7 @@ export default function DashboardPage() {
           id === 'plan-approval' ||
           id === 'diff-viewer' ||
           id === 'tests-and-preview' ||
+          id === 'pull-request' ||
           id === 'artifacts' ||
           id === 'transparency' ||
           id === 'evaluation'
@@ -108,6 +145,18 @@ export default function DashboardPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setActiveNav('pull-request')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium shrink-0 whitespace-nowrap transition-colors ${
+                  activeNav === 'pull-request'
+                    ? 'bg-primary-container text-on-primary-container font-semibold shadow-xs'
+                    : 'text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                <BranchIcon className="w-3.5 h-3.5" />
+                <span>Pull Request</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveNav('artifacts')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium shrink-0 whitespace-nowrap transition-colors ${
                   activeNav === 'artifacts'
@@ -148,25 +197,32 @@ export default function DashboardPage() {
       </div>
 
       {activeNav === 'evaluation' ? (
-        <EvalResults onNavigateToDiff={() => setActiveNav('diff-viewer')} />
+        <EvalResults runId={activeRunId} onNavigateToDiff={() => setActiveNav('diff-viewer')} />
       ) : activeNav === 'transparency' ? (
-        <TransparencyDashboard />
+        <TransparencyDashboard runId={activeRunId} />
       ) : activeNav === 'artifacts' ? (
         <ArtifactTrailViewer
+          runId={activeRunId}
+          onNavigateToDiff={() => setActiveNav('diff-viewer')}
+          onNavigateToTests={() => setActiveNav('tests-and-preview')}
+        />
+      ) : activeNav === 'pull-request' ? (
+        <PullRequestPage
+          runId={activeRunId}
           onNavigateToDiff={() => setActiveNav('diff-viewer')}
           onNavigateToTests={() => setActiveNav('tests-and-preview')}
         />
       ) : activeNav === 'tests-and-preview' ? (
-        <TestsAndPreview onNavigateToDiff={() => setActiveNav('diff-viewer')} />
+        <TestsAndPreview runId={activeRunId} onNavigateToDiff={() => setActiveNav('diff-viewer')} />
       ) : activeNav === 'diff-viewer' ? (
-        <DiffViewer />
+        <DiffViewer runId={activeRunId} />
       ) : activeNav === 'plan-approval' ? (
         <div className="p-space-md sm:p-space-lg max-w-[1600px] mx-auto w-full">
-          <PlanApproval />
+          <PlanApproval runId={activeRunId} />
         </div>
       ) : activeNav === 'live-console' ? (
         <div className="p-space-md sm:p-space-lg max-w-[1600px] mx-auto w-full">
-          <LiveConsole />
+          <LiveConsole runId={activeRunId} />
         </div>
       ) : (
         <div className="flex flex-col w-full">
@@ -175,7 +231,12 @@ export default function DashboardPage() {
             <DashboardHeader />
 
             {/* 2. Initial / Empty State Banner with Pipeline Visualization */}
-            <EmptyStatePanel />
+            <EmptyStatePanel
+              onRunCreated={(newRunId) => {
+                setActiveRunId(newRunId);
+                setActiveNav('live-console');
+              }}
+            />
 
             {/* 3. REST Client State Orchestration (Task 2) */}
             <RestClientStateSection />

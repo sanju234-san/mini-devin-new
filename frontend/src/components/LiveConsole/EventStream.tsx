@@ -39,8 +39,8 @@ export const EventStream: React.FC<EventStreamProps> = ({
     <div className="rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-col justify-between overflow-hidden shadow-sm h-[680px]">
       {/* Scrollable Event Area */}
       <div className="flex-1 p-space-md overflow-y-auto flex flex-col gap-space-sm" role="log" aria-label="Agent Event Stream">
-        {/* Error Banner if hook exposed an error */}
-        {error && (
+        {/* Error Banner if hook exposed an error and is not connected */}
+        {error && connectionState !== 'CONNECTED' && (
           <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-xs font-mono text-red-300 flex items-center gap-2">
             <svg className="w-4 h-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />

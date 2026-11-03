@@ -521,3 +521,86 @@ def test_planner_strips_unsolicited_workflow_from_non_workflow_issue():
         plan = res["plan"]
         assert plan["affected_files"] == ["src/components/PatientTable.tsx"]
         assert all(s["target_file"] != ".github/workflows/ci.yml" for s in plan["steps"])
+
+
+def test_coder_normalizes_headerless_diff_and_applies_in_sandbox(approved_state: dict):
+    """
+    Regression test: When the LLM emits a headerless diff (e.g. raw code, '+line', or '@@ ... @@'
+    without '--- a/...' / '+++ b/...'), Coder canonicalizes it with valid unified diff headers
+    so CodespacesSandboxManager.apply_diff succeeds without raising InvalidRequestError.
+    """
+    from app.sandbox.codespaces_manager import (
+        CodespacesSandboxManager,
+        DiffApplyRequest,
+        SandboxCreateRequest,
+    )
+
+    state = approved_state.copy()
+    headerless_diff = {
+        "plan_version_id": "v1",
+        "file_changes": [
+            {
+                "path": "src/calc.py",
+                "change_type": "modify",
+                "diff_text": "@@ -1,1 +1,2 @@\n def calc(a, b):\n+    return a + b",
+                "requirement_ids": ["REQ-1"],
+            }
+        ],
+    }
+
+    with patch("app.agents.model_router.complete", return_value=json.dumps(headerless_diff)):
+        res = coder_node(state)
+        assert res["status"] == "coding"
+        norm_diff = res["code_changes"][0]["diff_text"]
+        assert "--- a/src/calc.py" in norm_diff
+        assert "+++ b/src/calc.py" in norm_diff
+
+    sb_mgr = CodespacesSandboxManager(use_cloud_codespaces=False, allow_unsafe_host_execution=False)
+    sb = sb_mgr.create_sandbox(SandboxCreateRequest(repo_ref="owner/repo"))
+    try:
+        apply_resp = sb_mgr.apply_diff(DiffApplyRequest(sandbox_id=sb.sandbox_id, diff_text=norm_diff))
+        assert apply_resp.success is True
+        assert "src/calc.py" in apply_resp.applied_files
+    finally:
+        sb_mgr.destroy_sandbox(sb.sandbox_id)
+
+
+def test_test_runner_handles_invalid_diff_without_infrastructure_crash():
+    """
+    Regression test: If an invalid diff reaches test_runner_node and raises InvalidRequestError,
+    test_runner catches it as a patch application failure (infrastructure_failure=False)
+    so route_test_runner routes to debugger instead of halting at test_unverified_terminal.
+    """
+    from app.agents.graph import route_test_runner
+    from app.agents.test_runner.agent import test_runner_node
+    from app.sandbox.codespaces_manager import CodespacesSandboxManager
+
+    state = {
+        "repo": "owner/repo",
+        "code_changes": [
+            {
+                "path": "",
+                "diff_text": "completely invalid diff with no headers and no path",
+            }
+        ],
+        "retry_count": 0,
+        "max_retries": 3,
+        "events": [],
+    }
+
+    with patch("app.sandbox.codespaces_manager.get_sandbox_manager") as mock_get_sb:
+        mock_get_sb.return_value = CodespacesSandboxManager(
+            use_cloud_codespaces=False,
+            allow_unsafe_host_execution=True,
+        )
+        out = test_runner_node(state)
+
+    tr = out["test_results"]
+    assert tr["passed"] is False
+    assert tr["infrastructure_failure"] is False
+    assert tr["sandbox_unavailable"] is False
+    assert "Diff contains no valid file headers" in tr["details"]
+
+    next_node = route_test_runner({**state, **out})
+    assert next_node == "debugger"
+

@@ -70,6 +70,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@contextlib.asynccontextmanager
+async def _async_timeout(delay: float) -> AsyncIterator[None]:
+    """Python 3.10 compatible equivalent of asyncio.timeout."""
+    if hasattr(asyncio, "timeout"):
+        async with asyncio.timeout(delay):
+            yield
+        return
+    task = asyncio.current_task()
+    timed_out = False
+
+    def _on_timeout() -> None:
+        nonlocal timed_out
+        timed_out = True
+        if task is not None:
+            task.cancel()
+
+    loop = asyncio.get_running_loop()
+    handle = loop.call_later(delay, _on_timeout)
+    try:
+        yield
+    except asyncio.CancelledError as exc:
+        if timed_out:
+            raise asyncio.TimeoutError() from exc
+        raise
+    finally:
+        handle.cancel()
+
+
 def _create_tar_with_file(filename: str, content: bytes, mode: int = 0o644) -> bytes:
     """Helper to create an in-memory tarball containing a single file."""
     buf = io.BytesIO()
@@ -310,7 +338,7 @@ class DockerSandboxManager(SandboxManager):
                     container_kwargs["shm_size"] = "256m"
 
                 # Step 4: Create and start container under deadline
-                async with asyncio.timeout(effective_timeout):
+                async with _async_timeout(effective_timeout):
                     container = await asyncio.to_thread(
                         client.containers.create, **container_kwargs
                     )
@@ -488,6 +516,13 @@ async def lifespan_resource(app: FastAPI) -> AsyncIterator[None]:
     2. Clears app.state.sandbox_manager and the module-level reference.
     """
     settings = app.state.settings
+    if getattr(settings, "SANDBOX_BACKEND", "docker") != "docker":
+        logger.info(
+            "SANDBOX_BACKEND=%s; skipping Docker daemon startup check.",
+            settings.SANDBOX_BACKEND,
+        )
+        yield
+        return
     manager = DockerSandboxManager(settings)
 
     # Health-check Docker connection

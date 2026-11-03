@@ -39,7 +39,13 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.agent_gateway import EmptyMetricsProvider, LangGraphAgentGateway, NoOpAgentGateway, NoOpPlanResumer
+from app.api.agent_gateway import (
+    EmptyMetricsProvider,
+    LangGraphAgentGateway,
+    LangGraphPlanResumer,
+    NoOpAgentGateway,
+    NoOpPlanResumer,
+)
 from app.api.run_store import InMemoryRunStore
 from app.config import Settings, get_settings
 
@@ -64,6 +70,7 @@ _ROUTER_MODULES: tuple[tuple[str, str], ...] = (
     ("app.api.webhooks", "router"),
     ("app.api.artifacts", "router"),
     ("app.api.metrics", "router"),
+    ("app.api.ws", "router"),
 )
 
 
@@ -168,9 +175,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.failed_hooks: list[str] = []
     application.state.http_client = None
     application.state.run_store = InMemoryRunStore()
-    application.state.agent_gateway = LangGraphAgentGateway()
+    application.state.agent_gateway = LangGraphAgentGateway(run_store=application.state.run_store)
     application.state.metrics_provider = EmptyMetricsProvider()
-    application.state.plan_resumer = NoOpPlanResumer()
+    application.state.plan_resumer = LangGraphPlanResumer(run_store=application.state.run_store)
 
     # ── CORS ─────────────────────────────────────────────────────────
     # NOTE: CORSMiddleware does NOT protect WebSocket routes.

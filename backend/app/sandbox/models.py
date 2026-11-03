@@ -84,3 +84,98 @@ class TimeoutError(SandboxError):
 
 class InvalidRequestError(SandboxError):
     pass
+
+
+# ── Container / Browser Sandbox Compatibility Schemas ─────────────────────────
+
+from enum import Enum
+from urllib.parse import urlparse
+from uuid import UUID
+from pydantic import field_validator
+
+
+class SandboxStatus(str, Enum):
+    passed = "passed"
+    failed = "failed"
+    timed_out = "timed_out"
+    diff_rejected = "diff_rejected"
+    error = "error"
+
+
+class SandboxArtifact(BaseModel):
+    name: str
+    type: str = "screenshot"
+    content_type: str = "application/octet-stream"
+    size_bytes: int = 0
+    data: bytes = b""
+
+
+class BrowserCheck(BaseModel):
+    start_command: List[str] = Field(..., min_length=1)
+    url: str
+    paths: List[str] = Field(default_factory=lambda: ["/"])
+    readiness_timeout_seconds: int = Field(default=15, ge=1, le=120)
+    startup_timeout_seconds: int = Field(default=15, ge=1, le=120)
+    check_timeout_seconds: int = Field(default=30, ge=1, le=180)
+    screenshot: bool = True
+    record_video: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.username or parsed.password or "@" in (parsed.netloc or ""):
+            raise ValueError("URL must not contain userinfo")
+        if parsed.hostname not in ("127.0.0.1", "localhost"):
+            raise ValueError("URL hostname must be 127.0.0.1 or localhost")
+        if parsed.port is None:
+            raise ValueError("URL must include an explicit port number")
+        if not (1024 <= parsed.port <= 65535):
+            raise ValueError("URL port must be between 1024 and 65535")
+        return v
+
+    @field_validator("paths")
+    @classmethod
+    def _validate_paths(cls, v: List[str]) -> List[str]:
+        if not (1 <= len(v) <= 5):
+            raise ValueError("paths count must be between 1 and 5")
+        for p in v:
+            if not p.startswith("/"):
+                raise ValueError("Each path must be a relative route starting with '/'")
+        return v
+
+
+class BrowserCheckResult(BaseModel):
+    ok: bool = False
+    error: Optional[str] = None
+    http_status: Dict[str, int] = Field(default_factory=dict)
+    page_title: Optional[str] = None
+    console_errors: List[str] = Field(default_factory=list)
+    page_errors: List[str] = Field(default_factory=list)
+    failed_requests: List[str] = Field(default_factory=list)
+    server_log_tail: Optional[str] = None
+    video_supported: bool = False
+    duration_seconds: float = 0.0
+
+
+class SandboxRunRequest(BaseModel):
+    run_id: UUID
+    repo_archive: bytes
+    diff: Optional[str] = None
+    setup_command: Optional[List[str]] = None
+    test_command: List[str] = Field(..., min_length=1)
+    timeout_seconds: Optional[int] = None
+    browser: Optional[BrowserCheck] = None
+
+
+class SandboxRunResult(BaseModel):
+    run_id: UUID
+    status: SandboxStatus
+    exit_code: Optional[int] = None
+    diff_applied: bool = False
+    log: str = ""
+    log_truncated: bool = False
+    duration_seconds: float = 0.0
+    error: Optional[str] = None
+    browser: Optional[BrowserCheckResult] = None
+    artifacts: List[SandboxArtifact] = Field(default_factory=list)

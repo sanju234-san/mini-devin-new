@@ -160,9 +160,12 @@ def load_pipeline(
         )
 
     import joblib
+    import warnings
 
     try:
-        pipeline = joblib.load(pipe_file)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            pipeline = joblib.load(pipe_file)
     except Exception:
         # Fall back to compatibility unpickler for Colab-exported pickle files
         try:
