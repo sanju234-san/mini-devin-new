@@ -1,0 +1,98 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      spacing: {
+        '0.2': '0.05rem',
+        'space-xs': '0.25rem',
+        'space-sm': '0.5rem',
+        'space-md': '0.75rem',
+        'space-lg': '1rem',
+        'space-xl': '1.5rem',
+        gutter: '1rem',
+        'gutter-desktop': '1.5rem',
+        margin: '1rem',
+        'margin-desktop': '1.5rem',
+      },
+      colors: {
+        background: '#0d141d',
+        'on-background': '#dce3f0',
+        surface: '#0d141d',
+        'surface-dim': '#0d141d',
+        'surface-bright': '#333a44',
+        'surface-container-lowest': '#080f17',
+        'surface-container-low': '#151c25',
+        'surface-container': '#192029',
+        'surface-container-high': '#232a34',
+        'surface-container-highest': '#2e353f',
+        'on-surface': '#dce3f0',
+        'on-surface-variant': '#c2c6d6',
+        'inverse-surface': '#dce3f0',
+        'inverse-on-surface': '#2a313b',
+        outline: '#8c909f',
+        'outline-variant': '#424754',
+        'surface-tint': '#adc6ff',
+        primary: {
+          DEFAULT: '#adc6ff',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+        },
+        'on-primary': '#002e6a',
+        'primary-container': '#4d8eff',
+        'on-primary-container': '#00285d',
+        'inverse-primary': '#005ac2',
+        secondary: {
+          DEFAULT: '#c0c1ff',
+        },
+        'on-secondary': '#1000a9',
+        'secondary-container': '#3131c0',
+        'on-secondary-container': '#b0b2ff',
+        tertiary: {
+          DEFAULT: '#4cd7f6',
+        },
+        'on-tertiary': '#003640',
+        'tertiary-container': '#009eb9',
+        'on-tertiary-container': '#002f38',
+        error: {
+          DEFAULT: '#ffb4ab',
+        },
+        'on-error': '#690005',
+        'error-container': '#93000a',
+        'on-error-container': '#ffdad6',
+        'surface-border': '#30363d',
+        'surface-hover': '#21262d',
+        brand: {
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+        },
+      },
+      borderRadius: {
+        xs: '0.0625rem',
+      },
+      boxShadow: {
+        xs: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+      },
+      animation: {
+        fadeIn: 'fadeIn 0.2s ease-in-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+      },
+    },
+  },
+  plugins: [],
+};

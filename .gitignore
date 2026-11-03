@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Evaluation output
+evaluation/reports/*
+!evaluation/reports/.gitkeep
+
+# OS
+.DS_Store
+
+# ML Models & Artifacts
+backend/app/ml_models/training/data/
+backend/app/ml_models/artifacts/
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.faiss
+*.index
+*.joblib
+
+# Frontend & Caches
+.next/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Runtime & Session Data
+.files/
+playground/browser_testing/artifacts/*
+!playground/browser_testing/artifacts/.gitkeep
+
+# Workspaces, runtime databases, and scratch
+workspaces/
+scratch/
+*.db
+.chainlit
+.next
+.venv
+.env

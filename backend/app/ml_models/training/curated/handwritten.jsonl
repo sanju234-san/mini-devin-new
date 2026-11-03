@@ -1,0 +1,75 @@
+{"text": "Add unit tests for the authentication module. The login and logout flows have no coverage and recently caused a regression.", "label": "test_writing"}
+{"text": "We need integration tests for the payment processing pipeline. Every new release breaks something unexpected there.", "label": "test_writing"}
+{"text": "Write tests for the CSV export utility. It has zero test coverage and the logic is non-trivial.", "label": "test_writing"}
+{"text": "Add regression tests for the bug fixed in #342. Without tests it will keep coming back.", "label": "test_writing"}
+{"text": "The database migration helpers have no automated tests. Please add unit tests before the next release.", "label": "test_writing"}
+{"text": "Request: add end-to-end tests for the user onboarding flow using pytest.", "label": "test_writing"}
+{"text": "We should add property-based tests for the serialization layer using hypothesis.", "label": "test_writing"}
+{"text": "No tests exist for the rate limiter middleware. Please write tests covering edge cases.", "label": "test_writing"}
+{"text": "Add snapshot tests for the dashboard React components. Currently there are none.", "label": "test_writing"}
+{"text": "Write tests for the CLI argument parser. It has a lot of branches with no coverage.", "label": "test_writing"}
+{"text": "The cache invalidation logic needs unit tests. It is subtle and error-prone.", "label": "test_writing"}
+{"text": "Add tests for the retry decorator used across the codebase. It has never been tested directly.", "label": "test_writing"}
+{"text": "Please write test cases for the email notification sender, including failure and timeout scenarios.", "label": "test_writing"}
+{"text": "We need tests for the file upload handler — specifically large files and invalid MIME types.", "label": "test_writing"}
+{"text": "Add test coverage for the permission-checking decorator on admin endpoints.", "label": "test_writing"}
+{"text": "Write unit tests for the pagination helper. It is used everywhere but has no tests.", "label": "test_writing"}
+{"text": "The webhook receiver has no tests. Please add tests for signature verification and payload parsing.", "label": "test_writing"}
+{"text": "Add tests for the background task queue. Specifically enqueue, dequeue, and failure handling.", "label": "test_writing"}
+{"text": "Increase test coverage for the data validation module from 20% to at least 80%.", "label": "test_writing"}
+{"text": "Write tests for the API client library we ship to users. Right now coverage is 0%.", "label": "test_writing"}
+{"text": "Add pytest fixtures and tests for the config loader — it reads from env vars and yaml files.", "label": "test_writing"}
+{"text": "We need tests for the search ranking algorithm. The function is complex and untested.", "label": "test_writing"}
+{"text": "Write tests for the image resizing utility: various aspect ratios and invalid inputs.", "label": "test_writing"}
+{"text": "Add contract tests between the frontend and the REST API so breaking changes are caught early.", "label": "test_writing"}
+{"text": "The session management code has no tests. Please add tests for creation, expiry, and invalidation.", "label": "test_writing"}
+{"text": "Write fuzz tests for the XML parser. It processes untrusted input and has never been fuzz-tested.", "label": "test_writing"}
+{"text": "Add test coverage for the billing module. An accountant found a calculation bug that tests would have caught.", "label": "test_writing"}
+{"text": "Please add load tests for the search endpoint using locust. It degrades under concurrent requests.", "label": "test_writing"}
+{"text": "Write unit tests for the password reset token generation and validation logic.", "label": "test_writing"}
+{"text": "Add tests for the multi-tenant data isolation logic. A missing test here could lead to data leaks.", "label": "test_writing"}
+{"text": "Add pytest tests for the GraphQL resolver layer. No test file exists at all.", "label": "test_writing"}
+{"text": "Write parameterized tests for the currency conversion function covering edge cases like zero and negative values.", "label": "test_writing"}
+{"text": "Create unit tests for the notification scheduler. The cron expression parsing is untested.", "label": "test_writing"}
+{"text": "The token refresh logic is completely uncovered by tests. Please write tests for token expiry and renewal.", "label": "test_writing"}
+{"text": "Add integration tests for the Stripe webhook handler verifying HMAC signature and idempotency.", "label": "test_writing"}
+{"text": "Write tests for the markdown renderer. It has complex escaping logic with 0% coverage.", "label": "test_writing"}
+{"text": "Add regression test suite for the data pipeline ETL steps. A recent refactor broke prod silently.", "label": "test_writing"}
+{"text": "Please write tests for the S3 upload helper covering both success and boto3 ClientError paths.", "label": "test_writing"}
+{"text": "Add snapshot tests for the PDF generation module. Output format keeps drifting unnoticed.", "label": "test_writing"}
+{"text": "We need tests for the distributed lock manager, especially the TTL expiry and renewal edge cases.", "label": "test_writing"}
+{"text": "Write unit tests for the feature-flag evaluation engine \u2014 targeting all combination rules.", "label": "test_writing"}
+{"text": "Create tests for the role-based access control matrix. Edge cases around super-admin inheritance are untested.", "label": "test_writing"}
+{"text": "Add test coverage for the IP geolocation lookup utility, including timeout and parse-error paths.", "label": "test_writing"}
+{"text": "Please add property-based tests for the JSON schema validator using hypothesis strategies.", "label": "test_writing"}
+{"text": "Write tests for the audit log writer \u2014 verifying structure, timestamps, and actor fields.", "label": "test_writing"}
+{"text": "We should add end-to-end tests for the OAuth2 authorization code flow using the test client.", "label": "test_writing"}
+{"text": "Add tests for the async task runner \u2014 covering retry backoff, cancellation, and timeout scenarios.", "label": "test_writing"}
+{"text": "Write golden-file tests for the report generator so layout regressions are caught automatically.", "label": "test_writing"}
+{"text": "Add mutation tests for the security module using mutmut to find untested code paths.", "label": "test_writing"}
+{"text": "Create contract tests between the API gateway and the downstream microservices using Pact.", "label": "test_writing"}
+{"text": "The SAML SSO integration has no automated tests. Please write tests for assertion parsing and signature validation.", "label": "test_writing"}
+{"text": "Write tests for the CSV import parser, covering malformed UTF-8, missing headers, and quote escaping.", "label": "test_writing"}
+{"text": "Add benchmarking tests for the full-text search endpoint to track performance regressions.", "label": "test_writing"}
+{"text": "Create tests for the secret rotation job \u2014 verifying old credentials are revoked and new ones persisted.", "label": "test_writing"}
+{"text": "Write tests for the data masking middleware that redacts PII before logging.", "label": "test_writing"}
+{"text": "Add coverage for the graph traversal algorithm. BFS and DFS paths have no assertions.", "label": "test_writing"}
+{"text": "We need tests for the multi-step form wizard \u2014 state transitions and validation per step.", "label": "test_writing"}
+{"text": "Add tests for the Slack bot command parser, especially optional argument handling and error replies.", "label": "test_writing"}
+{"text": "Write tests for the dependency injection container \u2014 scope isolation and singleton lifecycle.", "label": "test_writing"}
+{"text": "Add tests for the circuit breaker implementation: open, closed, and half-open state transitions.", "label": "test_writing"}
+{"text": "Refactor the entire authentication module to use dependency injection instead of global state.", "label": "out_of_scope"}
+{"text": "What is the recommended way to deploy this application on AWS ECS with Fargate?", "label": "out_of_scope"}
+{"text": "Please update the README with setup instructions for macOS and Windows.", "label": "out_of_scope"}
+{"text": "Is there a roadmap for adding support for Python 3.13?", "label": "out_of_scope"}
+{"text": "Rewrite the database layer to use async SQLAlchemy instead of the sync ORM.", "label": "out_of_scope"}
+{"text": "Can someone explain how the token bucket rate limiter works in this codebase?", "label": "out_of_scope"}
+{"text": "Update the contributing guide to reflect the new pre-commit hooks and branch naming conventions.", "label": "out_of_scope"}
+{"text": "Discussion: should we migrate from REST to GraphQL for the public API?", "label": "out_of_scope"}
+{"text": "Extract the billing module into a separate microservice to reduce coupling with the core app.", "label": "out_of_scope"}
+{"text": "How do I configure the logger to output JSON format in production?", "label": "out_of_scope"}
+{"text": "Add architecture diagrams to the docs folder explaining the event-driven pipeline.", "label": "out_of_scope"}
+{"text": "RFC: Deprecate the v1 API endpoints and start the sunset process over the next two quarters.", "label": "out_of_scope"}
+{"text": "Migrate the frontend from Create React App to Vite to speed up the build pipeline.", "label": "out_of_scope"}
+{"text": "Question: which ORM does this project use and why was SQLAlchemy chosen over Django ORM?", "label": "out_of_scope"}
+{"text": "Large-scale rename: replace all occurrences of 'user_id' with 'account_id' across the codebase for consistency.", "label": "out_of_scope"}

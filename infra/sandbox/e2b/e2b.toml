@@ -1,0 +1,3 @@
+# E2B sandbox template configuration (Firecracker microVM).
+template_id = "mini-devin-sandbox"
+dockerfile = "../docker/Dockerfile.sandbox"

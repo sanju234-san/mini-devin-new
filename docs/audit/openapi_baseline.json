@@ -1,0 +1,1126 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mini-Devin Backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "List agent runs with pagination",
+        "description": "Retrieve a paginated list of agent runs ordered newest first.",
+        "operationId": "list_runs_runs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum number of runs to return (1-100)",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Maximum number of runs to return (1-100)"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of runs to skip",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of runs to skip"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get details of a specific agent run",
+        "description": "Fetch complete details for a run, including the original issue body.",
+        "operationId": "get_run_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/plan": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Get proposed implementation plan for a run",
+        "description": "Fetch the proposed implementation plan from graph state checkpoint.",
+        "operationId": "get_run_plan_runs__run_id__plan_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Plan Runs  Run Id  Plan Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/plan/decision": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Record human approval, edit, or rejection decision on proposed plan",
+        "description": "Accept human plan decision and resume the paused LangGraph workflow.",
+        "operationId": "decide_plan_runs__run_id__plan_decision_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanDecisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Plan Runs  Run Id  Plan Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/approve": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Approve the proposed plan for code modification",
+        "description": "Convenience endpoint to approve the plan.",
+        "operationId": "approve_plan_runs__run_id__approve_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Approve Plan Runs  Run Id  Approve Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/reject": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Reject the proposed plan and halt workflow safely",
+        "description": "Convenience endpoint to reject the plan.",
+        "operationId": "reject_plan_runs__run_id__reject_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reject Plan Runs  Run Id  Reject Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/issues/ingest": {
+      "post": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Ingest a GitHub issue and queue an autonomous run",
+        "description": "Accept an issue description, create a queued run, and start background processing.\n\nReturns HTTP 202 Accepted with the initial RunSummary representation.",
+        "operationId": "ingest_issue_issues_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/github": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "GitHub webhook intake endpoint",
+        "description": "Receive, authenticate, and process GitHub webhook events.",
+        "operationId": "github_webhook_webhooks_github_post",
+        "responses": {
+          "200": {
+            "description": "Ping acknowledged or event ignored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RunSummary"
+                    }
+                  ],
+                  "title": "Response Github Webhook Webhooks Github Post"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Issue opened and run queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/artifacts": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "List all artifacts for a run",
+        "description": "Return all artifact metadata items associated with the specified run.\n\nReturns HTTP 404 if the run does not exist.",
+        "operationId": "list_artifacts_runs__run_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactOut"
+                  },
+                  "title": "Response List Artifacts Runs  Run Id  Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Get text content of an artifact",
+        "description": "Retrieve the text content and metadata of a specific artifact.\n\nReturns HTTP 404 if the run or artifact is not found.\nReturns HTTP 501 if attempting to fetch binary content (screenshot/recording).",
+        "operationId": "get_artifact_runs__run_id__artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactContent"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Get system evaluation and benchmark metrics",
+        "description": "Return aggregated benchmark and evaluation statistics.",
+        "operationId": "get_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArtifactContent": {
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactOut",
+            "description": "Artifact metadata"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Raw text content of the artifact"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact",
+          "content"
+        ],
+        "title": "ArtifactContent",
+        "description": "Artifact metadata combined with its raw text content."
+      },
+      "ArtifactOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique artifact identifier (UUIDv4)"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id",
+            "description": "ID of the run that generated this artifact"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ArtifactType",
+            "description": "Type of artifact"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Human-readable filename or title"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "MIME content type (e.g. text/plain, text/markdown, image/png)"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "description": "Size of artifact content in bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when artifact was recorded (UTC)"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "Identifier of the agent that produced this artifact (e.g. coder, planner)"
+          },
+          "model_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Used",
+            "description": "LLM model name used to generate this artifact, if applicable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "type",
+          "name",
+          "content_type",
+          "size_bytes"
+        ],
+        "title": "ArtifactOut",
+        "description": "Metadata describing a generated artifact.\n\nNote: There are NO private reasoning or internal chain-of-thought fields\non this model. Only external, user-facing artifact metadata is exposed."
+      },
+      "ArtifactType": {
+        "type": "string",
+        "enum": [
+          "implementation_plan",
+          "code_diff",
+          "test_log",
+          "screenshot",
+          "recording",
+          "walkthrough"
+        ],
+        "title": "ArtifactType",
+        "description": "Classification of artifacts produced by agents during a run.\n\nValues:\n    implementation_plan: Natural-language proposed fix and step-by-step plan.\n    code_diff: Unified Git diff generated by the coding agent.\n    test_log: Output logs from sandbox test executions.\n    screenshot: Visual screenshot captured during browser/UI validation.\n    recording: Video recording of sandbox verification.\n    walkthrough: User-facing summary explaining the completed fix."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IssueIn": {
+        "properties": {
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "title": "Repo",
+            "description": "Repository in 'owner/repo' format",
+            "examples": [
+              "octocat/Hello-World"
+            ]
+          },
+          "issue_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Issue Number",
+            "description": "GitHub issue number (positive integer)",
+            "examples": [
+              42
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "description": "Issue title (1 to 256 characters)",
+            "examples": [
+              "Fix ZeroDivisionError in calculation handler"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 65536,
+            "title": "Body",
+            "description": "Issue description/body (max 64 KiB plain text)",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "repo",
+          "issue_number",
+          "title"
+        ],
+        "title": "IssueIn",
+        "description": "Request schema for ingesting a GitHub issue to start a run.\n\nEnforces strict validation on repository name format, issue number,\ntitle length, and maximum body size to protect against malformed or\nmalicious input."
+      },
+      "IssueRef": {
+        "properties": {
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "title": "Repo",
+            "description": "Repository in 'owner/repo' format"
+          },
+          "issue_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Issue Number",
+            "description": "GitHub issue number"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "description": "Issue title"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "repo",
+          "issue_number",
+          "title"
+        ],
+        "title": "IssueRef",
+        "description": "Summary reference to the GitHub issue associated with a run."
+      },
+      "MetricsOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "Whether evaluation metrics are currently available"
+          },
+          "fix_accuracy": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix Accuracy",
+            "description": "Historical or benchmark fix accuracy rate (0.0 to 1.0)"
+          },
+          "test_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Pass Rate",
+            "description": "Fraction of test suites passing on first or final attempt (0.0 to 1.0)"
+          },
+          "avg_self_correction_iterations": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Self Correction Iterations",
+            "description": "Average number of debugger/self-correction loops per issue"
+          },
+          "swe_bench_lite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SWEBenchLiteMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SWE-bench Lite benchmark performance stats, if evaluated"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "Timestamp when metrics were last refreshed (UTC)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "MetricsOut",
+        "description": "Evaluation metrics payload returned by the /metrics endpoint."
+      },
+      "PlanDecisionIn": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "edit",
+              "reject"
+            ],
+            "title": "Decision",
+            "description": "Human decision: approve, edit, or reject the proposed plan.",
+            "examples": [
+              "approve"
+            ]
+          },
+          "edited_plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited Plan",
+            "description": "Modified plan object. Required when decision is 'edit', forbidden otherwise. Must be <= 64 KiB when serialised to JSON. The backend does not validate the plan's inner structure."
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Optional short rationale for the decision (max 2 000 characters). Allowed for any decision type. Never echoed in API responses."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "PlanDecisionIn",
+        "description": "Request body for POST /runs/{run_id}/plan/decision.\n\nValidation rules\n----------------\n- decision must be one of: approve, edit, reject.\n- edited_plan is required when decision == 'edit' and is forbidden for\n  approve/reject (to avoid ambiguous payloads).\n- edited_plan JSON serialisation must be <= 64 KiB.\n- reason is optional for any decision (max 2 000 characters). The\n  backend stores it internally but never echoes it back in responses.\n- Extra fields are rejected (extra='forbid') to catch client typos early."
+      },
+      "RunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique run identifier (UUIDv4)"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus",
+            "description": "Current status of the run"
+          },
+          "current_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Step",
+            "description": "Current agent or action step being executed"
+          },
+          "issue": {
+            "$ref": "#/components/schemas/IssueRef",
+            "description": "Reference to the ingested issue"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the run was created (UTC)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the run was last updated (UTC)"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error message if the run failed or escalated"
+          },
+          "issue_body": {
+            "type": "string",
+            "title": "Issue Body",
+            "description": "Full text body of the ingested GitHub issue",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "issue"
+        ],
+        "title": "RunDetail",
+        "description": "Detailed representation of an agent run, including full issue body."
+      },
+      "RunList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "List of run summaries ordered newest first"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Total number of runs matching the query"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Page size limit"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "description": "Offset from start of list"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RunList",
+        "description": "Paginated list of agent run summaries."
+      },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "awaiting_plan_approval",
+          "completed",
+          "failed",
+          "rejected",
+          "escalated"
+        ],
+        "title": "RunStatus",
+        "description": "Lifecycle status of an autonomous agent run.\n\nValues:\n    queued: Run created and waiting for background execution.\n    running: Agents are actively analyzing, coding, or testing.\n    awaiting_plan_approval: Paused waiting for human developer review of the plan.\n    completed: Run successfully generated a verified pull request.\n    failed: Run failed due to an error, timeout, or exhausted retries.\n    rejected: Plan or PR was explicitly rejected by the human reviewer.\n    escalated: Stopped by safety guardrails or required human intervention."
+      },
+      "RunSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique run identifier (UUIDv4)"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus",
+            "description": "Current status of the run"
+          },
+          "current_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Step",
+            "description": "Current agent or action step being executed"
+          },
+          "issue": {
+            "$ref": "#/components/schemas/IssueRef",
+            "description": "Reference to the ingested issue"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the run was created (UTC)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "Timestamp when the run was last updated (UTC)"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error message if the run failed or escalated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "issue"
+        ],
+        "title": "RunSummary",
+        "description": "Summary representation of an agent run (used in lists and status polls)."
+      },
+      "SWEBenchLiteMetrics": {
+        "properties": {
+          "resolved": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Resolved",
+            "description": "Number of benchmark instances resolved"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Total number of benchmark instances evaluated"
+          },
+          "resolve_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Resolve Rate",
+            "description": "Fraction of instances resolved (0.0 to 1.0)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolved",
+          "total",
+          "resolve_rate"
+        ],
+        "title": "SWEBenchLiteMetrics",
+        "description": "SWE-bench Lite benchmark results."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

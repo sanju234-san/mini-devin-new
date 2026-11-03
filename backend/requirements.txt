@@ -1,0 +1,27 @@
+fastapi
+uvicorn[standard]
+langgraph
+langchain
+faiss-cpu
+docker>=7.1.0
+e2b
+playwright
+mlflow
+
+# ML/DL task allocation (Triage classifier + Retrieval embeddings)
+transformers
+sentence-transformers
+
+# Hybrid LLM routing: Groq -> Google AI Studio (Gemini) -> Hugging Face
+groq
+google-generativeai
+huggingface_hub
+
+websockets
+httpx
+pydantic
+pydantic-settings
+python-dotenv
+scikit-learn
+joblib
+

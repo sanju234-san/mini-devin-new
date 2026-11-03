@@ -1,0 +1,40 @@
+# Browser verification sandbox image for Mini-Devin
+# Builds upon the hardened Python sandbox base image
+FROM mini-devin-sandbox:py
+
+# Temporarily switch to root to install browser dependencies
+USER root
+
+# Install dependencies required for headless Chromium
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libnss3 \
+        libnspr4 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libxkbcommon0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libasound2t64 \
+        fonts-liberation && \
+    rm -rf /var/lib/apt/lists/*
+
+# Pinned playwright package (exact version, well-tested)
+RUN pip install --no-cache-dir playwright==1.48.0
+
+# Install Chromium browser binary into shared directory accessible by sandbox user
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright && \
+    python -m playwright install --with-deps chromium && \
+    chown -R sandbox:sandbox /ms-playwright
+
+# Return to non-root sandbox execution user
+USER sandbox
+WORKDIR /workspace
