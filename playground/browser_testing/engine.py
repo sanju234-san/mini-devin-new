@@ -171,10 +171,32 @@ class BrowserTestRunner:
     def __enter__(self) -> "BrowserTestRunner":
         self._started_at = _now()
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(
-            headless=self._headless,
-            slow_mo=self._slow_mo,
-        )
+        try:
+            try:
+                self._browser = self._pw.chromium.launch(
+                    headless=self._headless,
+                    slow_mo=self._slow_mo,
+                )
+            except Exception:
+                try:
+                    self._browser = self._pw.chromium.launch(
+                        channel="msedge",
+                        headless=self._headless,
+                        slow_mo=self._slow_mo,
+                    )
+                except Exception:
+                    self._browser = self._pw.chromium.launch(
+                        channel="chrome",
+                        headless=self._headless,
+                        slow_mo=self._slow_mo,
+                    )
+        except Exception:
+            try:
+                self._pw.stop()
+            except Exception:
+                pass
+            self._pw = None
+            raise
         self._context = self._browser.new_context(
             viewport={"width": 1280, "height": 800},
             # Never pass stored credentials; auth must be handled per-test
@@ -278,7 +300,7 @@ class BrowserTestRunner:
                 fname = f"{step_idx:02d}_{status_tag}_{safe_name}.png"
                 ss_path = self._artifact_dir / fname
                 try:
-                    self._page.screenshot(path=str(ss_path), full_page=True)
+                    self._page.screenshot(path=str(ss_path), full_page=False, timeout=5000)
                     screenshot_path = str(ss_path)
                     logger.info("Screenshot saved: %s", screenshot_path)
                 except Exception as ss_err:

@@ -16,6 +16,7 @@ import { PullRequestPage } from '../components/PullRequest';
 import { ArtifactTrailViewer } from '../components/Artifacts';
 import { TransparencyDashboard } from '../components/Transparency';
 import { EvalResults } from '../components/EvalResults';
+import { LandingPage } from '../components/Landing/LandingPage';
 import { getRuns } from '../services/api';
 import {
   TerminalIcon,
@@ -41,6 +42,7 @@ type NavView =
   | 'evaluation';
 
 export default function DashboardPage() {
+  const [showLanding, setShowLanding] = useState<boolean>(true);
   const [activeNav, setActiveNav] = useState<NavView>('dashboard');
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
 
@@ -57,6 +59,20 @@ export default function DashboardPage() {
         // Keep current fallback when backend is unreachable
       });
   }, [activeNav]);
+
+  if (showLanding) {
+    return (
+      <LandingPage
+        onOpenWorkbench={(targetView = 'dashboard', newRunId) => {
+          if (newRunId) {
+            setActiveRunId(newRunId);
+          }
+          setActiveNav(targetView);
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
 
   return (
     <AppShell
@@ -80,6 +96,13 @@ export default function DashboardPage() {
       {/* Top View Toggle Banner for immediate visibility and testing */}
       <div className="bg-surface-container-low/70 border-b border-outline-variant/20 px-space-md py-2 flex items-center w-full min-w-0">
         <div className="flex items-center gap-2.5 w-full min-w-0">
+          <button
+            type="button"
+            onClick={() => setShowLanding(true)}
+            className="px-2.5 py-1 rounded-md text-xs font-mono bg-surface-container-high hover:bg-surface-container-highest border border-outline-variant/30 text-primary shrink-0 cursor-pointer transition-colors"
+          >
+            ← Home
+          </button>
           <span className="text-xs text-on-surface-variant font-mono shrink-0 select-none">View:</span>
           <div className="flex-1 min-w-0 overflow-x-auto py-0.5">
             <div className="inline-flex rounded-lg bg-surface-container-high p-0.5 border border-outline-variant/30 flex-nowrap shrink-0 gap-0.5">

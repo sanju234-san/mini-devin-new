@@ -135,9 +135,32 @@ class RepositorySnapshotService:
             meta_file = snapshot_dir / "snapshot_metadata.json"
             if snapshot_dir.is_dir() and meta_file.is_file():
                 logger.info("Found existing verified snapshot cache at %s", snapshot_dir)
+                # Strip any leftover placeholder tokens ('new_line' / 'old_line') from cached source files before starting a new run
+                if getattr(self, "_owns_mcp_client", False):
+                    for ext_pat in ("*.tsx", "*.ts", "*.jsx", "*.js"):
+                        for src_f in snapshot_dir.rglob(ext_pat):
+                            if "node_modules" in src_f.parts:
+                                continue
+                            try:
+                                raw_t = src_f.read_text(encoding="utf-8", errors="ignore")
+                                if "\nnew_line" in raw_t or "new_line\n" in raw_t:
+                                    cleaned_lines = [
+                                        l for l in raw_t.splitlines()
+                                        if l.strip() not in ("new_line", "old_line", "context_line")
+                                    ]
+                                    src_f.write_text("\n".join(cleaned_lines) + "\n", encoding="utf-8")
+                            except Exception:
+                                pass
                 return snapshot_dir
 
-            # 3. Attempt genuine MCP snapshot
+            # 3. For live runs (owns_mcp_client), prefer complete shallow clone so full repo + Frontend/src are present
+            if getattr(self, "_owns_mcp_client", False) and allow_shallow_clone_fallback:
+                try:
+                    return self._fetch_via_shallow_clone(owner, repo, branch, commit_sha, snapshot_dir)
+                except Exception as clone_err:
+                    logger.warning("Shallow clone failed (%s), falling back to MCP snapshot...", clone_err)
+
+            # 4. Attempt genuine MCP snapshot
             try:
                 logger.info("Fetching MCP snapshot for %s/%s@%s...", owner, repo, branch)
                 await self._fetch_via_mcp(owner, repo, branch, commit_sha, snapshot_dir)
@@ -147,7 +170,7 @@ class RepositorySnapshotService:
                 if not allow_shallow_clone_fallback:
                     raise
 
-            # 4. Fallback: argument-vector shallow clone (hooks disabled, no submodules)
+            # 5. Fallback: argument-vector shallow clone (hooks disabled, no submodules)
             logger.warning(
                 "NON_MCP_FALLBACK: Initiating shallow clone fallback for %s/%s@%s",
                 owner, repo, branch,
@@ -257,10 +280,14 @@ class RepositorySnapshotService:
                         if encoding == "base64" and raw_content:
                             try:
                                 clean_b64 = re.sub(r"\s+", "", raw_content)
+                                if not re.fullmatch(r"[A-Za-z0-9+/=]+", clean_b64):
+                                    raise ValueError("Already decoded plain text")
                                 missing_padding = len(clean_b64) % 4
                                 if missing_padding:
                                     clean_b64 += "=" * (4 - missing_padding)
-                                content_bytes = base64.b64decode(clean_b64)
+                                decoded = base64.b64decode(clean_b64, validate=True)
+                                decoded.decode("utf-8")
+                                content_bytes = decoded
                             except Exception:
                                 content_bytes = raw_content.encode("utf-8")
                         elif "text" in file_data:
@@ -370,35 +397,25 @@ class RepositorySnapshotService:
         if git_dir.exists():
             shutil.rmtree(git_dir, ignore_errors=True)
 
-        # Enforce file limits and strip forbidden files
+        # Strip secret/credential files while preserving all repository source & frontend assets for Vite/Next builds
         file_count = 0
         total_bytes = 0
         for root, dirs, files in os.walk(snapshot_dir):
-            dirs[:] = [d for d in dirs if not is_sensitive_or_binary(d)]
+            dirs[:] = [d for d in dirs if d not in {".git", ".hg", ".svn", "node_modules", "__pycache__"}]
             for fname in files:
                 fpath = Path(root) / fname
-                if is_sensitive_or_binary(fname):
+                lower_f = fname.lower()
+                if lower_f == ".env" or lower_f.startswith(".env.") or lower_f.endswith((".pem", ".key", ".pfx", ".pkcs12")):
                     try:
                         fpath.unlink()
                     except OSError:
                         pass
                     continue
 
-                size = fpath.stat().st_size
-                if size > MAX_FILE_BYTES:
-                    try:
-                        fpath.unlink()
-                    except OSError:
-                        pass
+                try:
+                    size = fpath.stat().st_size
+                except OSError:
                     continue
-
-                if file_count >= MAX_SNAPSHOT_FILES or total_bytes + size > MAX_TOTAL_SNAPSHOT_BYTES:
-                    try:
-                        fpath.unlink()
-                    except OSError:
-                        pass
-                    continue
-
                 file_count += 1
                 total_bytes += size
 

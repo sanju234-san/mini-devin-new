@@ -52,6 +52,7 @@ def _call_groq(prompt: str) -> str:
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=model_name,
+            max_tokens=4096,
         )
         return chat_completion.choices[0].message.content
     except Exception as exc:
@@ -62,6 +63,7 @@ def _call_groq(prompt: str) -> str:
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model=fallback_model,
+                max_tokens=4096,
             )
             return chat_completion.choices[0].message.content
         raise
@@ -101,17 +103,19 @@ def _call_ollama(prompt: str) -> str:
     import httpx
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     model_name = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
-    timeout_sec = float(os.getenv("OLLAMA_TIMEOUT", "300.0"))
-    num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+    timeout_sec = min(float(os.getenv("OLLAMA_TIMEOUT", "45.0")), 45.0)
+    num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
     # Call Ollama native generate endpoint
     resp = httpx.post(
         f"{base_url}/api/generate",
         json={
             "model": model_name,
             "prompt": prompt,
+            "format": "json" if "json" in prompt.lower() else "",
             "stream": False,
             "options": {
                 "num_ctx": num_ctx,
+                "num_predict": 2048,
                 "temperature": 0.1,
             },
         },
@@ -136,6 +140,8 @@ def complete(prompt: str, agent_name: str = ""):
     provider_errors: dict[str, str] = {}
     last_exc = None
     chain = [p.strip() for p in os.getenv("LLM_PROVIDER_CHAIN", ",".join(PROVIDER_CHAIN)).split(",") if p.strip()]
+    if agent_name == "coder" and "groq" in chain and chain[0] == "ollama":
+        chain = ["groq"] + [p for p in chain if p != "groq"]
     for provider in chain:
         if provider not in provider_map:
             continue

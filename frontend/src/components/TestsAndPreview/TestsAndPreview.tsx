@@ -43,6 +43,27 @@ export const TestsAndPreview: React.FC<TestsAndPreviewProps> = ({
   const [autoScroll, setAutoScroll] = useState(true);
   const [clearedBuffer, setClearedBuffer] = useState(false);
 
+  // Live Localhost & Playwright Screenshot state
+  const [localhostUrl, setLocalhostUrl] = useState('http://localhost:5173');
+  const [browserViewTab, setBrowserViewTab] = useState<'screenshot' | 'iframe'>('screenshot');
+  const [iframeKey, setIframeKey] = useState(0);
+  const [isCapturingBrowser, setIsCapturingBrowser] = useState(false);
+  const [manualBrowserReport, setManualBrowserReport] = useState<{
+    passed?: boolean;
+    status?: string;
+    target_url?: string;
+    screenshot_data_url?: string;
+    blocking_reason?: string;
+    steps?: Array<{
+      step_name?: string;
+      url?: string;
+      expected?: string;
+      observed?: string;
+      passed?: boolean;
+      screenshot_data_url?: string;
+    }>;
+  } | null>(null);
+
   // Consume Task 3 WebSocket Client hook
   const {
     connectionState,
@@ -66,11 +87,14 @@ export const TestsAndPreview: React.FC<TestsAndPreviewProps> = ({
         const statusStr = String(payload.status || evt.eventType || '').toLowerCase();
 
         if (agent === 'test_runner') {
+          const isBrowserEvt =
+            String(evt.eventType || '').toLowerCase().includes('browser') ||
+            String(evt.message || '').toLowerCase().includes('browser test');
+          if (isBrowserEvt) return;
           const passed =
             payload.passed === true ||
             statusStr.includes('success') ||
-            statusStr.includes('pass') ||
-            statusStr.includes('complete');
+            statusStr.includes('pass');
           cases.push({
             id: `tc-sandbox-${idx}`,
             name: 'Sandbox Test Suite Execution',
@@ -81,7 +105,7 @@ export const TestsAndPreview: React.FC<TestsAndPreviewProps> = ({
               typeof payload.details === 'string' && payload.details.trim()
                 ? payload.details.trim()
                 : evt.message || 'Executed test suite in isolated sandbox environment.',
-            assertionError: !passed ? String(payload.details || evt.message || 'Test failed') : undefined,
+            assertionError: !passed ? String(payload.blocking_reason || payload.details || evt.message || 'Test failed') : undefined,
           });
         } else if (agent === 'coder' && statusStr.includes('success')) {
           cases.push({
@@ -223,7 +247,9 @@ export const TestsAndPreview: React.FC<TestsAndPreviewProps> = ({
               : 'stdout',
           content: `${evt.agent ? `[${evt.agent}] ` : ''}${
             evt.tool ? `tool: ${evt.tool} - ` : ''
-          }${JSON.stringify(evt.payload || evt.raw || '')}`,
+          }${JSON.stringify(evt.payload || evt.raw || '', (k, v) =>
+            k === 'screenshot_data_url' && typeof v === 'string' ? '[base64_png_captured]' : v
+          )}`,
         };
       });
     }
@@ -286,6 +312,49 @@ export const TestsAndPreview: React.FC<TestsAndPreviewProps> = ({
     setActivePreviewState(st);
     setClearedBuffer(false);
   };
+
+  // Extract latest browser_tests_completed payload from WebSocket events or manual trigger
+  const activeBrowserReport = useMemo(() => {
+    if (manualBrowserReport) return manualBrowserReport;
+    for (let i = liveEvents.length - 1; i >= 0; i--) {
+      const evt = liveEvents[i];
+      const evType = String(evt.eventType || '').toLowerCase();
+      const payload = (evt.payload || {}) as Record<string, unknown>;
+      const meta = (payload.metadata || payload) as Record<string, unknown>;
+      if (evType.includes('browser') || meta.screenshot_data_url || meta.target_url) {
+        return {
+          passed: Boolean(meta.passed ?? payload.passed),
+          status: String(payload.status || (meta.passed ? 'passed' : 'completed')),
+          target_url: String(meta.target_url || localhostUrl),
+          screenshot_data_url: typeof meta.screenshot_data_url === 'string' ? meta.screenshot_data_url : undefined,
+          blocking_reason: typeof meta.blocking_reason === 'string' ? meta.blocking_reason : undefined,
+          steps: Array.isArray(meta.steps) ? (meta.steps as any[]) : [],
+        };
+      }
+    }
+    return null;
+  }, [manualBrowserReport, liveEvents, localhostUrl]);
+
+  const handleRunBrowserCapture = useCallback(async () => {
+    setIsCapturingBrowser(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001';
+      const resp = await fetch(`${apiBase}/runs/browser-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_url: localhostUrl, run_id: runId }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setManualBrowserReport(data);
+        setBrowserViewTab('screenshot');
+      }
+    } catch {
+      // Non-fatal fallback
+    } finally {
+      setIsCapturingBrowser(false);
+    }
+  }, [localhostUrl, runId]);
 
   const isSkeleton = !isLiveStream && activePreviewState === 'skeleton';
   const isOffline =

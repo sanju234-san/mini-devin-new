@@ -93,6 +93,9 @@ export function parseUnifiedDiffText(diffText: string): {
   let inHunk = false;
 
   for (const line of lines) {
+    if (line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('diff --git ')) {
+      continue;
+    }
     if (line.startsWith('@@')) {
       inHunk = true;
       continue;

@@ -122,22 +122,43 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ runId = '' }) => {
           };
         });
       } else if (typeof artifacts.diff === 'string') {
-        // Raw unified diff string fallback
-        const parsedDiff = parseUnifiedDiffText(artifacts.diff);
-        totalAdditions = parsedDiff.additions;
-        totalDeletions = parsedDiff.deletions;
-        files = [
-          {
-            path: 'changes.diff',
-            changeType: 'modify',
-            language: 'plaintext',
-            diffText: artifacts.diff,
-            originalCode: parsedDiff.originalCode,
-            modifiedCode: parsedDiff.modifiedCode,
-            additions: parsedDiff.additions,
-            deletions: parsedDiff.deletions,
-          },
-        ];
+        // Split unified diff string by file headers ('--- a/...' / '+++ b/...')
+        const chunks = artifacts.diff.split(/(?=^---\s+(?:a\/|\S+))/m).filter((c) => c.trim().length > 0);
+        if (chunks.length > 0 && chunks.some((c) => /^---\s+/m.test(c))) {
+          files = chunks.map((chunk) => {
+            const headerMatch = chunk.match(/^\+\+\+\s+(?:b\/)?([^\r\n]+)/m) || chunk.match(/^---\s+(?:a\/)?([^\r\n]+)/m);
+            const filePath = headerMatch ? headerMatch[1].trim() : 'changes.diff';
+            const parsedDiff = parseUnifiedDiffText(chunk);
+            totalAdditions += parsedDiff.additions;
+            totalDeletions += parsedDiff.deletions;
+            return {
+              path: filePath,
+              changeType: 'modify',
+              language: detectLanguage(filePath),
+              diffText: chunk,
+              originalCode: parsedDiff.originalCode,
+              modifiedCode: parsedDiff.modifiedCode,
+              additions: parsedDiff.additions,
+              deletions: parsedDiff.deletions,
+            };
+          });
+        } else {
+          const parsedDiff = parseUnifiedDiffText(artifacts.diff);
+          totalAdditions = parsedDiff.additions;
+          totalDeletions = parsedDiff.deletions;
+          files = [
+            {
+              path: 'changes.diff',
+              changeType: 'modify',
+              language: 'plaintext',
+              diffText: artifacts.diff,
+              originalCode: parsedDiff.originalCode,
+              modifiedCode: parsedDiff.modifiedCode,
+              additions: parsedDiff.additions,
+              deletions: parsedDiff.deletions,
+            },
+          ];
+        }
       }
 
       setRealDiffData({

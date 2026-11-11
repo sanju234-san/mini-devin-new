@@ -119,34 +119,140 @@ export const PullRequestPage: React.FC<PullRequestPageProps> = ({
       });
     };
 
-    return text.split('\n').map((rawLine, i) => {
-      const line = rawLine.trimEnd();
-      if (!line.trim()) {
-        return <div key={i} className="h-2" />;
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i].trimEnd();
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        elements.push(<div key={i} className="h-2" />);
+        i++;
+        continue;
+      }
+
+      // Fenced code / diff blocks (```diff ... ```)
+      if (trimmed.startsWith('```')) {
+        const lang = trimmed.slice(3).trim().toLowerCase();
+        const codeLines: string[] = [];
+        const startKey = i;
+        i++;
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          codeLines.push(lines[i].replace(/\r$/, ''));
+          i++;
+        }
+        if (i < lines.length) i++; // skip closing ```
+        elements.push(
+          <pre
+            key={startKey}
+            className="my-2 p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/30 overflow-x-auto font-mono text-[11px] leading-relaxed"
+          >
+            {codeLines.map((cl, cIdx) => {
+              const isDiff = lang === 'diff' || cl.startsWith('--- ') || cl.startsWith('+++ ') || cl.startsWith('@@');
+              let cls = 'text-on-surface-variant';
+              if (isDiff || lang === 'diff') {
+                if (cl.startsWith('+') && !cl.startsWith('+++')) cls = 'text-emerald-400 bg-emerald-500/10 px-1 rounded-sm block';
+                else if (cl.startsWith('-') && !cl.startsWith('---')) cls = 'text-rose-400 bg-rose-500/10 px-1 rounded-sm block';
+                else if (cl.startsWith('@@')) cls = 'text-sky-400 block';
+                else if (cl.startsWith('---') || cl.startsWith('+++')) cls = 'text-on-surface font-semibold block';
+                else cls = 'text-on-surface-variant block';
+              } else {
+                cls = 'text-on-surface-variant block';
+              }
+              return (
+                <div key={cIdx} className={cls}>
+                  {cl || ' '}
+                </div>
+              );
+            })}
+          </pre>
+        );
+        continue;
+      }
+
+      // Markdown tables (| Col 1 | Col 2 |)
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        const tableLines: string[] = [];
+        const startKey = i;
+        while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+          tableLines.push(lines[i].trim());
+          i++;
+        }
+        const parseCells = (row: string) =>
+          row
+            .slice(1, -1)
+            .split('|')
+            .map((c) => c.trim());
+        const dataRows = tableLines.filter((r) => !/^\|[\s:|-]+\|$/.test(r));
+        if (dataRows.length > 0) {
+          const headerCells = parseCells(dataRows[0]);
+          const bodyRows = dataRows.slice(1).map(parseCells);
+          elements.push(
+            <div key={startKey} className="my-2 overflow-x-auto rounded-lg border border-outline-variant/30">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-surface-container-high text-on-surface">
+                  <tr>
+                    {headerCells.map((hc, hIdx) => (
+                      <th key={hIdx} className="px-3 py-2 font-semibold border-b border-outline-variant/30">
+                        {formatInline(hc)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/20 bg-surface-container-low/40">
+                  {bodyRows.map((rowCells, rIdx) => (
+                    <tr key={rIdx}>
+                      {rowCells.map((cell, cIdx) => (
+                        <td key={cIdx} className="px-3 py-2 text-on-surface-variant align-top">
+                          {formatInline(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+          continue;
+        }
+      }
+
+      if (trimmed === '---' || trimmed === '***') {
+        elements.push(<hr key={i} className="my-2 border-outline-variant/25" />);
+        i++;
+        continue;
       }
       if (line.startsWith('# ')) {
-        return (
+        elements.push(
           <h4 key={i} className="text-sm sm:text-base font-bold text-on-surface pb-1.5 mb-1 border-b border-outline-variant/25">
             {formatInline(line.slice(2))}
           </h4>
         );
+        i++;
+        continue;
       }
       if (line.startsWith('## ')) {
-        return (
+        elements.push(
           <h5 key={i} className="text-xs sm:text-sm font-semibold text-primary uppercase tracking-wider mt-3 mb-1">
             {formatInline(line.slice(3))}
           </h5>
         );
+        i++;
+        continue;
       }
       if (line.startsWith('### ')) {
-        return (
+        elements.push(
           <h6 key={i} className="text-xs font-semibold text-on-surface mt-2 mb-0.5">
             {formatInline(line.slice(4))}
           </h6>
         );
+        i++;
+        continue;
       }
       if (line.startsWith('> ')) {
-        return (
+        elements.push(
           <div
             key={i}
             className="pl-3 py-1 my-0.5 border-l-2 border-primary/50 bg-primary-container/10 rounded-r text-xs text-on-surface-variant"
@@ -154,21 +260,28 @@ export const PullRequestPage: React.FC<PullRequestPageProps> = ({
             {formatInline(line.slice(2))}
           </div>
         );
+        i++;
+        continue;
       }
       if (line.startsWith('- ') || line.startsWith('* ')) {
-        return (
+        elements.push(
           <div key={i} className="flex items-start gap-2 pl-2 py-0.5 text-xs text-on-surface-variant">
             <span className="text-primary mt-0.5 select-none">•</span>
             <span className="flex-1 leading-relaxed">{formatInline(line.slice(2))}</span>
           </div>
         );
+        i++;
+        continue;
       }
-      return (
+      elements.push(
         <p key={i} className="text-xs text-on-surface-variant leading-relaxed">
           {formatInline(line)}
         </p>
       );
-    });
+      i++;
+    }
+
+    return elements;
   };
 
   const prBody =

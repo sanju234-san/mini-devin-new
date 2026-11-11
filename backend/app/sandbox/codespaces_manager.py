@@ -277,7 +277,6 @@ class CodespacesSandboxManager(SandboxManager):
                 backend_env = ""
         self.use_cloud_codespaces = (
             use_cloud_codespaces
-            or (backend_env == "codespaces")
             or (os.getenv("MINI_DEVIN_USE_CLOUD_CODESPACES", "false").lower() == "true")
         )
         self.api_base_url = api_base_url.rstrip("/")
@@ -451,6 +450,13 @@ class CodespacesSandboxManager(SandboxManager):
                     return DiffApplyResponse(success=False, error=err_msg, applied_files=[])
                 logger.info("Applied diff to cloud codespace '%s': %s", cs_name, applied_files)
                 return DiffApplyResponse(success=True, applied_files=applied_files)
+            except subprocess.TimeoutExpired:
+                logger.warning("gh cs ssh timed out on '%s'; falling back to isolated_local sandbox.", cs_name)
+                temp_dir = tempfile.mkdtemp(prefix=f"mdevin_sandbox_{req.sandbox_id}_")
+                os.makedirs(os.path.join(temp_dir, "tests"), exist_ok=True)
+                os.makedirs(os.path.join(temp_dir, "src"), exist_ok=True)
+                info["type"] = "isolated_local"
+                info["workspace_path"] = temp_dir
             except Exception as exc:
                 logger.exception("Failed to apply diff to cloud codespace %s: %s", cs_name, exc)
                 return DiffApplyResponse(success=False, error=str(exc), applied_files=[])
@@ -685,8 +691,7 @@ def get_sandbox_manager(allow_unsafe_host_execution: Optional[bool] = None) -> C
 
     backend_env = os.getenv("SANDBOX_BACKEND", "").lower()
     expected_cloud = (
-        (backend_env == "codespaces")
-        or (os.getenv("MINI_DEVIN_USE_CLOUD_CODESPACES", "false").lower() == "true")
+        os.getenv("MINI_DEVIN_USE_CLOUD_CODESPACES", "false").lower() == "true"
     )
     if (
         _DEFAULT_SANDBOX_MANAGER is None

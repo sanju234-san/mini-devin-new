@@ -58,5 +58,9 @@ PERMITTED_URL_PREFIXES: list[str] = [
 
 
 def is_permitted(url: str) -> bool:
-    """Return True only when *url* starts with an approved prefix."""
-    return any(url.startswith(prefix) for prefix in PERMITTED_URL_PREFIXES)
+    """Return True only when *url* starts with an approved prefix or GitHub Codespaces forwarded port domain."""
+    if any(url.startswith(prefix) for prefix in PERMITTED_URL_PREFIXES):
+        return True
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    return host.endswith(".app.github.dev") or host.endswith(".github.dev")

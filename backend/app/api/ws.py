@@ -202,7 +202,8 @@ class RunEventBroadcaster:
                 try:
                     await ws.send_json(envelope)
                 except Exception:
-                    pass
+                    self._subscribers.get(run_id, set()).discard(ws)
+                    self._global_subscribers.discard(ws)
 
     def load_checkpoint_events(self, run_id: str) -> list[dict[str, Any]]:
         """Read any persisted events from the LangGraph checkpointer if history is empty."""

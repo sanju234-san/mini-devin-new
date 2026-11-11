@@ -165,3 +165,96 @@ async def submit_plan_decision(
 
     return run_summary
 
+
+@router.post(
+    "/browser-preview",
+    summary="Execute live Playwright browser check and capture screenshot against a permitted localhost URL",
+)
+async def trigger_browser_preview(
+    payload: dict,
+    store: RunStore = Depends(get_run_store),
+) -> dict:
+    """Launch headless Playwright against a permitted localhost URL and return screenshot + assertions."""
+    import asyncio
+    from app.agents.schemas import create_event
+    from app.agents.test_runner.browser_runner import (
+        ensure_repo_preview_server,
+        run_browser_tests_for_agent,
+    )
+
+    target_url = str(payload.get("target_url") or "http://localhost:5173").strip()
+    run_id_str = str(payload.get("run_id") or "").strip() or None
+    ensure_only = bool(payload.get("ensure_only", False))
+
+    if ":5173" in target_url:
+        repo_name = str(payload.get("repo") or "").strip()
+        issue_title = "Live Repository Fix Verification"
+        if run_id_str:
+            try:
+                run_detail = await store.get_run(UUID(run_id_str))
+                if run_detail:
+                    issue_ref = getattr(run_detail, "issue", None)
+                    repo_name = (
+                        getattr(issue_ref, "repo", None)
+                        or getattr(run_detail, "repository", None)
+                        or repo_name
+                    )
+                    issue_title = (
+                        getattr(issue_ref, "title", None)
+                        or getattr(run_detail, "title", None)
+                        or issue_title
+                    )
+            except Exception:
+                pass
+        live_url = ensure_repo_preview_server(repo=repo_name, issue_title=issue_title, port=5173)
+        if not live_url:
+            return {
+                "status": "blocked",
+                "passed": False,
+                "target_url": target_url,
+                "total_steps": 0,
+                "passed_steps": 0,
+                "failed_steps": 0,
+                "steps": [],
+                "blocking_reason": f"Repository '{repo_name or 'current run'}' has no runnable web frontend.",
+            }
+        if ("localhost:5173" in target_url or "127.0.0.1:5173" in target_url) and live_url:
+            target_url = live_url
+
+    if ensure_only:
+        return {"status": "ready", "target_url": target_url}
+
+    report = await asyncio.to_thread(
+        run_browser_tests_for_agent,
+        target_url=target_url,
+        run_id=run_id_str,
+        scenarios=["availability"],
+    )
+
+    if run_id_str:
+        try:
+            from app.api.ws import broadcaster
+            evt = create_event(
+                agent_name="test_runner",
+                event_type="browser_tests_completed",
+                status="success" if report.get("passed") else "failed",
+                message=(
+                    f"Browser test run finished: status={report.get('status')} "
+                    f"steps={report.get('total_steps', 0)} "
+                    f"passed={report.get('passed_steps', 0)}"
+                ),
+                metadata={
+                    "target_url": report.get("target_url"),
+                    "screenshot_data_url": report.get("screenshot_data_url"),
+                    "steps": report.get("steps", []),
+                    "passed": report.get("passed", False),
+                    "blocking_reason": report.get("blocking_reason", ""),
+                },
+            )
+            await broadcaster.publish_events(run_id_str, [evt])
+        except Exception:
+            pass
+
+    return report
+
+

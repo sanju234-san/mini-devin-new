@@ -90,14 +90,17 @@ def try_llm_plan_generation(
             f"--- {s.get('file_path')} (lines {s.get('start_line')}-{s.get('end_line')}) ---\n{s.get('content')}"
             for s in retrieved.get("snippets", [])
         )
+        verified_files = retrieved.get("files", [])
+        files_list_str = ", ".join(verified_files) if verified_files else "None"
         formatted_issue = format_issue_for_prompt(title, body)
         prompt = (
             f"You are the Planner Agent for Mini-Devin.\n"
             f"{formatted_issue}\n\n"
+            f"Verified Repository Files:\n{files_list_str}\n\n"
             f"Code Evidence:\n{snippets_text}\n\n"
             f"Generate a detailed implementation plan. Your response must be a valid JSON object "
             f"matching the ImplementationPlan schema. Ensure all file paths, steps, and root cause "
-            f"findings are grounded in the provided Code Evidence.\n"
+            f"findings are grounded in the Verified Repository Files and Code Evidence above (do NOT invent non-existent file paths when modifying existing components).\n"
             f"CRITICAL: Do NOT include '.github/workflows/*', '.github/actions/*', '.env*', or secret/key files "
             f"in 'affected_files' or 'steps' unless the issue explicitly asks to modify GitHub Actions workflows.\n"
             f"Schema requirements:\n"
@@ -602,6 +605,26 @@ def planner_node(state: AgentState, config: Optional[RunnableConfig] = None) -> 
         else dict(retrieved_raw)
     )
 
+    workspace_path = state.get("workspace_path") or state.get("snapshot_path")
+    ws_files: list[str] = []
+    if workspace_path and Path(workspace_path).is_dir():
+        ws_root = Path(workspace_path)
+        skip_dirs = {".git", "node_modules", "dist", "build", ".next", "__pycache__", ".venv", "venv"}
+        for p in ws_root.rglob("*"):
+            if p.is_file() and not any(part in skip_dirs for part in p.parts):
+                if p.suffix.lower() in {".js", ".jsx", ".ts", ".tsx", ".py", ".css", ".html"}:
+                    ws_files.append(p.relative_to(ws_root).as_posix())
+        if ws_files:
+            q_words = {w.lower() for w in re.findall(r"[A-Za-z]{3,}", f"{title} {body}")}
+            ranked_ws = sorted(
+                ws_files,
+                key=lambda fp: sum(2 for w in q_words if w in fp.lower()),
+                reverse=True,
+            )
+            existing_ret_files = list(retrieved_dict.get("files") or [])
+            merged_files = list(dict.fromkeys(existing_ret_files + ranked_ws[:35]))
+            retrieved_dict["files"] = merged_files
+
     logger.info("Executing Planner node [tier=%s] for repo='%s'", tier, repo)
 
     # 1. Attempt LLM generation first via shared interface with active runnable config context
@@ -617,6 +640,43 @@ def planner_node(state: AgentState, config: Optional[RunnableConfig] = None) -> 
     finally:
         if config_token is not None:
             var_child_runnable_config.reset(config_token)
+
+    if plan is not None and ws_files:
+        ws_set = set(ws_files)
+        q_words = {w.lower() for w in re.findall(r"[A-Za-z]{3,}", f"{title} {body}")}
+        resolved_af: list[str] = []
+        path_remap: dict[str, str] = {}
+        for af in plan.affected_files:
+            norm_af = af.strip().replace("\\", "/")
+            if norm_af in ws_set:
+                if norm_af not in resolved_af:
+                    resolved_af.append(norm_af)
+                continue
+            # Skip invented non-existent test files if the repo doesn't have them
+            if any(t_tok in norm_af.lower() for t_tok in (".test.", ".spec.", "/tests/", "__tests__")):
+                continue
+            af_tokens = {w.lower() for w in re.findall(r"[A-Za-z]{3,}", Path(norm_af).stem)} | q_words
+            best_cand = max(
+                ws_files,
+                key=lambda fp: (
+                    sum(3 for w in af_tokens if w in Path(fp).stem.lower())
+                    + sum(1 for w in af_tokens if w in fp.lower())
+                    + (2 if fp in (retrieved_dict.get("files") or [])[:5] else 0)
+                ),
+                default=None,
+            )
+            if best_cand:
+                path_remap[af] = best_cand
+                if best_cand not in resolved_af:
+                    resolved_af.append(best_cand)
+        if resolved_af:
+            plan.affected_files = resolved_af
+            plan.provenance = "llm_generated"
+            for st in plan.steps:
+                if st.target_file in path_remap:
+                    st.target_file = path_remap[st.target_file]
+                elif st.target_file and st.target_file.strip().replace("\\", "/") not in ws_set:
+                    st.target_file = resolved_af[0]
 
     # 2. If LLM provider is unimplemented or fails, use evidence-grounded synthesizer
     if plan is None:

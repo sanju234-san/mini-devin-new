@@ -413,6 +413,13 @@ def edit_file(
         in_string = False
         str_char = None
         for line_idx, line in enumerate(new_full_content.splitlines(), 1):
+            stripped_l = line.strip()
+            if stripped_l in ("new_line", "old_line", "context_line"):
+                lint_err = f"Placeholder token '{stripped_l}' at line {line_idx}"
+                break
+            if not stack and not in_string and re.match(r"^(?:case\s+|default\s*:|return\b|break\b|continue\b|<[A-Za-z/])", stripped_l):
+                lint_err = f"Top-level statement '{stripped_l[:25]}' outside function/switch block at line {line_idx}"
+                break
             for ch in line:
                 if ch in ('"', "'", "`"):
                     if in_string and ch == str_char:
@@ -433,6 +440,19 @@ def edit_file(
         if not lint_err and stack:
             unclosed = stack[-1]
             lint_err = f"Unclosed bracket '{unclosed[0]}' opened at line {unclosed[1]}"
+        if not lint_err and norm_ext in (".tsx", ".jsx"):
+            lines_list = new_full_content.splitlines()
+            for idx_l in range(len(lines_list) - 1):
+                cur_s = lines_list[idx_l].strip()
+                nxt_s = lines_list[idx_l + 1].strip()
+                if (cur_s.endswith("/>") or re.search(r"</[A-Za-z0-9_]+>$", cur_s)) and re.match(
+                    r"^(?:function\s+|const\s+|let\s+|if\s*\(|console\.log\()", nxt_s
+                ):
+                    lint_err = f"Invalid JSX/TSX expression statement at line {idx_l + 2}"
+                    break
+                if re.match(r"^[A-Za-z0-9_.]+\(.*\)$", cur_s) and re.match(r"^<[A-Za-z]", nxt_s):
+                    lint_err = f"Invalid bare call before JSX tag at line {idx_l + 2}"
+                    break
 
     if lint_err:
         if resolved.exists():
